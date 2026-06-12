@@ -852,10 +852,30 @@ paths:
           schema:
             type: string
           example: /workspace/data.csv
+        - name: offset
+          in: query
+          required: false
+          description: >
+            Starting line number (1-based) for line-based reading.
+            Mutually exclusive with the Range header.
+          schema:
+            type: integer
+            minimum: 1
+          example: 100
+        - name: limit
+          in: query
+          required: false
+          description: >
+            Number of lines to return for line-based reading.
+            Mutually exclusive with the Range header.
+          schema:
+            type: integer
+            minimum: 1
+          example: 20
         - name: Range
           in: header
           required: false
-          description: HTTP Range header for partial content requests
+          description: HTTP Range header for partial content requests. Mutually exclusive with offset/limit.
           schema:
             type: string
           example: "bytes=0-1023"
