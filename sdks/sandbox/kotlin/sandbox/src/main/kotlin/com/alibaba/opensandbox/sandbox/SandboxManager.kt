@@ -276,12 +276,15 @@ class SandboxManager internal constructor(
                     )
             }
 
-            if (System.currentTimeMillis() + pollingInterval.toMillis() >= deadline) {
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining <= 0) {
                 throw SandboxReadyTimeoutException(
                     "Snapshot $snapshotId did not become ready within ${timeout.seconds}s ($attempt attempts)",
                 )
             }
-            Thread.sleep(pollingInterval.toMillis())
+            // Sleep for at most the remaining window so we keep polling until the real deadline
+            // instead of giving up early when one interval would overshoot it.
+            Thread.sleep(minOf(pollingInterval.toMillis(), remaining))
         }
     }
 
