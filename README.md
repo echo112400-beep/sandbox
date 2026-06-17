@@ -11,22 +11,22 @@
 
 <p align="center">
   <a href="https://github.com/alibaba/OpenSandbox">
-    <img src="https://img.shields.io/badge/GitHub%20Stars-11.6k-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub stars" />
+    <img src="https://img.shields.io/badge/GitHub%20Stars-11.6k-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub stars" />
   </a>
   <a href="https://www.bestpractices.dev/projects/12588">
-    <img src="https://img.shields.io/badge/OpenSSF-Best-4C566A?style=for-the-badge" alt="OpenSSF Best Practices" />
+    <img src="https://img.shields.io/badge/OpenSSF-Best-4C566A?style=flat-square" alt="OpenSSF Best Practices" />
   </a>
   <a href="https://landscape.cncf.io/?item=orchestration-management--scheduling-orchestration--opensandbox">
-    <img src="https://img.shields.io/badge/CNCF-Landscape-0C66E4?style=for-the-badge" alt="CNCF Landscape" />
+    <img src="https://img.shields.io/badge/CNCF-Landscape-0C66E4?style=flat-square" alt="CNCF Landscape" />
   </a>
   <a href="https://discord.gg/p3hggJf7HM">
-    <img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" />
+    <img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord" />
   </a>
   <a href="https://qr.dingtalk.com/action/joingroup?code=v1,k1,A4Bgl5q1I1eNU/r33D18YFNrMY108aFF38V+r19RJOM=&_dt_no_comment=1&origin=11">
-    <img src="https://img.shields.io/badge/DingTalk-Join-0089FF?style=for-the-badge&logo=dingtalk&logoColor=white" alt="DingTalk" />
+    <img src="https://img.shields.io/badge/DingTalk-Join-0089FF?style=flat-square&logo=dingtalk&logoColor=white" alt="DingTalk" />
   </a>
   <a href="https://github.com/alibaba/OpenSandbox/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/alibaba/OpenSandbox/real-e2e.yml?branch=main&label=TEST&style=for-the-badge&logo=github&logoColor=white" alt="E2E Status" />
+    <img src="https://img.shields.io/github/actions/workflow/status/alibaba/OpenSandbox/real-e2e.yml?branch=main&label=TEST&style=flat-square&logo=github&logoColor=white" alt="E2E Status" />
   </a>
 </p>
 
