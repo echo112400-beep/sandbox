@@ -543,6 +543,10 @@ class CreateSandboxResponse(BaseModel):
     id: str = Field(..., description="Unique sandbox identifier")
     status: SandboxStatus = Field(..., description="Current lifecycle status and detailed state information")
     metadata: Optional[Dict[str, str]] = Field(None, description="Custom metadata from creation request")
+    extensions: Optional[Dict[str, str]] = Field(
+        None,
+        description="Opaque extension data restored from provider-specific storage",
+    )
     platform: Optional[PlatformSpec] = Field(
         None,
         description=(
@@ -584,6 +588,10 @@ class Sandbox(BaseModel):
     )
     status: SandboxStatus = Field(..., description="Current lifecycle status and detailed state information")
     metadata: Optional[Dict[str, str]] = Field(None, description="Custom metadata from creation request")
+    extensions: Optional[Dict[str, str]] = Field(
+        None,
+        description="Opaque extension data restored from provider-specific storage",
+    )
     entrypoint: Optional[List[str]] = Field(None, description="The command to execute as the sandbox's entry process")
     expires_at: Optional[datetime] = Field(
         None,
