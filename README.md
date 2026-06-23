@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/alibaba/OpenSandbox">
-    <img src="https://img.shields.io/badge/GitHub%20Stars-11.6k-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub stars" />
+    <img src="https://img.shields.io/badge/Stars-11.6k-181717?style=flat-square&logo=github&logoColor=white" alt="Stars" />
   </a>
   <a href="https://www.bestpractices.dev/projects/12588">
     <img src="https://img.shields.io/badge/OpenSSF-Best-4C566A?style=flat-square" alt="OpenSSF Best Practices" />
@@ -32,12 +32,6 @@
 
   <hr />
 </div>
-
-<p align="center">
-  <a href="https://open-sandbox.ai/">
-    <img src="https://img.shields.io/badge/Documentation-open--sandbox.ai-0C66E4?style=flat-square" alt="Documentation" />
-  </a>
-</p>
 
 OpenSandbox is a **general-purpose sandbox platform** for AI applications, offering multi-language SDKs, unified sandbox APIs, and Docker/Kubernetes runtimes for scenarios like Coding Agents, GUI Agents, Agent Evaluation, AI Code Execution, and RL Training.
 
