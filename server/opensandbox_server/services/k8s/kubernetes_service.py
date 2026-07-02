@@ -322,10 +322,8 @@ class KubernetesSandboxService(K8sDiagnosticsMixin, SandboxService, ExtensionSer
                 plural=POOL_PLURAL,
                 name=pool_ref,
             )
-        except HTTPException:
-            raise
         except Exception as e:
-            logger.error(f"Failed to validate poolRef {pool_ref}: {e}")
+            logger.exception("Failed to validate poolRef %s", pool_ref)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={
