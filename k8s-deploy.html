@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenSandbox — K8s Runtime 安装部署</title>
+<style>
+  :root {
+    --bg: #07070d;
+    --surface: #111118;
+    --surface2: #181825;
+    --border: #252540;
+    --text: #e8e8f4;
+    --text2: #8e8eb8;
+    --accent: #5ea0ff;
+    --accent2: #7ec0ff;
+    --green: #00e0a0;
+    --blue: #5ea0ff;
+    --orange: #ffa050;
+    --pink: #ff6b8a;
+    --red: #f06070;
+    --yellow: #fed040;
+    --purple: #a78bfa;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow: 0 12px 48px rgba(0,0,0,0.35);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    position:relative; padding:100px 24px 80px; text-align:center; overflow:hidden;
+    border-bottom:1px solid var(--border);
+  }
+  .hero::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(94,160,255,0.22), transparent 70%),
+                radial-gradient(ellipse 50% 40% at 25% 85%, rgba(0,224,160,0.10), transparent 60%),
+                radial-gradient(ellipse 40% 35% at 80% 75%, rgba(167,139,250,0.10), transparent 60%);
+  }
+  .hero-content { position:relative; z-index:1; max-width:800px; margin:0 auto; }
+  .hero-badge {
+    display:inline-flex; align-items:center; gap:8px; padding:6px 16px;
+    border-radius:99px; font-size:13px; font-weight:600;
+    background:rgba(94,160,255,0.14); color:var(--accent2);
+    border:1px solid rgba(94,160,255,0.3); margin-bottom:20px;
+  }
+  .hero h1 { font-size:clamp(32px,5vw,56px); font-weight:800; letter-spacing:-1.5px; margin-bottom:12px; }
+  .hero h1 span { background:linear-gradient(135deg,var(--accent),var(--green),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .hero p { font-size:17px; color:var(--text2); max-width:600px; margin:0 auto 24px; }
+  .hero-stats { display:flex; justify-content:center; gap:40px; flex-wrap:wrap; }
+  .hero-stat { text-align:center; }
+  .hero-stat .num { font-size:28px; font-weight:800; color:var(--accent2); }
+  .hero-stat .lbl { font-size:12px; color:var(--text2); margin-top:2px; }
+
+  /* ── Layout ── */
+  .container { max-width:1100px; margin:0 auto; padding:0 24px; }
+  .section { padding:64px 0; }
+  .section-label {
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+    text-transform:uppercase; letter-spacing:1px; color:var(--accent2); margin-bottom:8px;
+  }
+  .section-label::before { content:''; width:4px; height:4px; border-radius:50%; background:var(--accent); }
+  .section-header h2 { font-size:26px; font-weight:700; margin-bottom:6px; }
+  .section-header { margin-bottom:40px; }
+  .section-header p { color:var(--text2); font-size:14px; }
+
+  /* ── Cards ── */
+  .grid-2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:20px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px; }
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; transition:all .25s;
+  }
+  .card:hover { border-color:rgba(94,160,255,0.4); transform:translateY(-2px); box-shadow:var(--shadow); }
+  .card-header { padding:20px 24px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--border); }
+  .card-icon { width:40px; height:40px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .card-icon.blue { background:rgba(94,160,255,0.15); color:var(--accent2); }
+  .card-icon.green { background:rgba(0,224,160,0.15); color:var(--green); }
+  .card-icon.orange { background:rgba(255,160,80,0.15); color:var(--orange); }
+  .card-icon.purple { background:rgba(167,139,250,0.15); color:var(--purple); }
+  .card-icon.pink { background:rgba(255,107,138,0.15); color:var(--pink); }
+  .card-title { font-size:15px; font-weight:700; }
+  .card-sub { font-size:12px; color:var(--text2); }
+  .card-body { padding:16px 24px 20px; }
+  .card-body ul { list-style:none; display:flex; flex-direction:column; gap:6px; }
+  .card-body li { position:relative; padding-left:18px; font-size:13px; color:var(--text2); }
+  .card-body li::before { content:''; position:absolute; left:0; top:7px; width:5px; height:5px; border-radius:50%; background:var(--accent); opacity:.5; }
+  .card-body li strong { color:var(--text); font-weight:600; }
+  .card-body p { font-size:13px; color:var(--text2); }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x:auto; }
+  .info-table { width:100%; border-collapse:collapse; min-width:560px; }
+  .info-table th {
+    text-align:left; padding:10px 14px; font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.5px; color:var(--text2);
+    border-bottom:1px solid var(--border);
+  }
+  .info-table td { padding:10px 14px; font-size:13px; border-bottom:1px solid var(--border); }
+  .info-table tr:last-child td { border-bottom:none; }
+  .info-table tr:hover td { background:rgba(94,160,255,0.04); }
+  .info-table td:first-child { font-weight:600; color:var(--text); white-space:nowrap; }
+  .info-table code {
+    background:rgba(94,160,255,0.1); color:var(--accent2);
+    padding:2px 6px; border-radius:4px; font-size:12px;
+  }
+
+  /* ── Code Block ── */
+  .code-block {
+    background:rgba(0,0,0,0.35); border:1px solid var(--border); border-radius:var(--radius-sm);
+    overflow-x:auto; position:relative;
+  }
+  .code-block .lang-tag {
+    position:absolute; top:8px; right:12px; font-size:10px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.5px; color:var(--text2); pointer-events:none;
+  }
+  .code-block pre {
+    font-family:'SF Mono','Fira Code','Cascadia Code',monospace; font-size:12.5px;
+    line-height:1.75; color:var(--text); padding:16px 20px; margin:0;
+  }
+  .code-block .kw { color:var(--pink); }
+  .code-block .str { color:var(--green); }
+  .code-block .cmt { color:var(--text2); }
+  .code-block .fn { color:var(--blue); }
+  .code-block .num { color:var(--orange); }
+
+  /* ── Step List ── */
+  .step-list { counter-reset:step; display:flex; flex-direction:column; gap:16px; }
+  .step-item {
+    position:relative; padding-left:48px; min-height:40px;
+  }
+  .step-item::before {
+    counter-increment:step; content:counter(step);
+    position:absolute; left:0; top:2px; width:30px; height:30px;
+    border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:800;
+    background:rgba(94,160,255,0.15); color:var(--accent2);
+  }
+  .step-item h4 { font-size:14px; font-weight:700; margin-bottom:4px; }
+  .step-item p { font-size:13px; color:var(--text2); }
+  .step-item code {
+    background:rgba(94,160,255,0.1); color:var(--accent2);
+    padding:1px 6px; border-radius:4px; font-size:12px;
+  }
+
+  /* ── Tag ── */
+  .tag {
+    display:inline-flex; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:700;
+  }
+  .tag.ok { background:rgba(0,224,160,0.12); color:var(--green); }
+  .tag.warn { background:rgba(255,160,80,0.12); color:var(--orange); }
+  .tag.info { background:rgba(94,160,255,0.12); color:var(--accent2); }
+
+  /* ── Verbatim note ── */
+  .note {
+    padding:12px 16px; border-radius:var(--radius-sm); margin:16px 0; font-size:13px;
+    border-left:3px solid;
+  }
+  .note.info { background:rgba(94,160,255,0.06); border-color:var(--accent); color:var(--text2); }
+  .note.warn { background:rgba(255,160,80,0.06); border-color:var(--orange); color:var(--text2); }
+  .note.tip { background:rgba(0,224,160,0.06); border-color:var(--green); color:var(--text2); }
+  .note strong { color:var(--text); }
+
+  /* ── Arch diagram ── */
+  .arch-row { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin:24px 0; }
+  .arch-box {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:20px 24px; text-align:center; min-width:180px; flex:1;
+  }
+  .arch-box.tall { min-height:120px; display:flex; flex-direction:column; justify-content:center; }
+  .arch-box h4 { font-size:14px; margin-bottom:6px; }
+  .arch-box p { font-size:11px; color:var(--text2); }
+  .arch-box .icon { font-size:28px; margin-bottom:8px; }
+  .arch-arrow { display:flex; align-items:center; color:var(--text2); font-size:22px; flex-shrink:0; }
+
+  /* ── Nav ── */
+  .nav {
+    position:sticky; top:0; z-index:100;
+    background:rgba(7,7,13,0.85); backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--border); padding:0 24px;
+  }
+  .nav-inner { max-width:1100px; margin:0 auto; display:flex; align-items:center; height:52px; gap:20px; }
+  .nav-logo { font-weight:800; font-size:17px; letter-spacing:-.5px; white-space:nowrap; }
+  .nav-logo span { background:linear-gradient(135deg,var(--accent),var(--green)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .nav-links { display:flex; gap:2px; overflow-x:auto; flex:1; }
+  .nav-links::-webkit-scrollbar { display:none; }
+  .nav-links a { font-size:12px; font-weight:600; color:var(--text2); text-decoration:none; padding:6px 12px; border-radius:6px; white-space:nowrap; transition:all .2s; }
+  .nav-links a:hover { color:var(--text); background:var(--surface2); }
+
+  /* ── Tab Switch ── */
+  .tab-bar { display:flex; gap:4px; margin-bottom:24px; flex-wrap:wrap; background:var(--surface2); padding:4px; border-radius:var(--radius-sm); }
+  .tab-btn {
+    padding:8px 18px; border-radius:6px; font-size:13px; font-weight:600; border:none; cursor:pointer;
+    background:transparent; color:var(--text2); transition:all .2s; font-family:inherit;
+  }
+  .tab-btn.active { background:var(--surface); color:var(--text); box-shadow:0 2px 8px rgba(0,0,0,0.2); }
+  .tab-btn:hover:not(.active) { color:var(--text); }
+
+  @media (max-width:768px) {
+    .grid-2, .grid-3 { grid-template-columns:1fr; }
+    .arch-row { flex-direction:column; }
+    .arch-arrow { transform:rotate(90deg); justify-content:center; }
+    .hero { padding:60px 16px 48px; }
+  }
+
+  .footer {
+    text-align:center; padding:48px 24px; color:var(--text2); font-size:13px;
+    border-top:1px solid var(--border); margin-top:40px;
+  }
+  .footer a { color:var(--accent2); text-decoration:none; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">Open<span>Sandbox</span></div>
+    <div class="nav-links">
+      <a href="#prereq">前置条件</a>
+      <a href="#quickstart">快速开始</a>
+      <a href="#charts">Helm Charts</a>
+      <a href="#crds">CRD 安装</a>
+      <a href="#server">Server 部署</a>
+      <a href="#snapshot">快照 Registry</a>
+      <a href="#rbac">RBAC</a>
+      <a href="#e2e">E2E 测试</a>
+      <a href="#trouble">故障排查</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">☸️ Kubernetes Runtime · Helm + CRD 部署</div>
+    <h1>K8s <span>安装部署</span>指南</h1>
+    <p>三步在 Kubernetes 集群上部署 OpenSandbox — 安装 Controller 管理 CRD，部署 Server 提供生命周期 API，配置 Snapshot Registry 启用暂停恢复。</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">Helm Charts</div></div>
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">CRD</div></div>
+      <div class="hero-stat"><div class="num">≥1.21</div><div class="lbl">K8s 版本</div></div>
+      <div class="hero-stat"><div class="num">~2min</div><div class="lbl">部署耗时</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ PREREQUISITES ═══════════ -->
+<div class="container" id="prereq">
+<div class="section">
+<div class="section-label">Prerequisites</div>
+<div class="section-header"><h2>📋 前置条件</h2><p>部署前确保以下环境已就绪</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">☸️</div><div><div class="card-title">集群要求</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>Kubernetes ≥ 1.21.1</strong> — E2E 测试使用 kindest/node:v1.22.4</li>
+      <li><strong>Helm 3.0+</strong></li>
+      <li><strong>kubectl v1.11.3+</strong></li>
+      <li>容器运行时: Docker / containerd</li>
+      <li>Go 1.24+ (仅开发/构建)</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">🔧</div><div><div class="card-title">可选工具</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>Kind</strong> — <code>go install sigs.k8s.io/kind@v0.20.0</code></li>
+      <li><strong>gVisor</strong> — 安全容器运行时 (可选)</li>
+      <li><strong>OCi Registry</strong> — 快照功能需要可访问的镜像仓库</li>
+    </ul></div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════════ ARCHITECTURE ═══════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Architecture</div>
+<div class="section-header"><h2>🏗️ 部署架构</h2><p>两个 Helm Chart 对应两个核心组件</p></div>
+
+<div class="arch-row">
+  <div class="arch-box tall">
+    <div class="icon">📦</div>
+    <h4>opensandbox-controller</h4>
+    <p>Operator · CRD 管理<br>Pool 调度 · 快照编排<br>Helm v0.2.0</p>
+  </div>
+  <div class="arch-arrow">→</div>
+  <div class="arch-box tall">
+    <div class="icon">🖥️</div>
+    <h4>opensandbox-server</h4>
+    <p>生命周期 API · 认证<br>Ingress 网关<br>Helm v0.1.0</p>
+  </div>
+  <div class="arch-arrow">→</div>
+  <div class="arch-box tall">
+    <div class="icon">☸️</div>
+    <h4>CRD 资源</h4>
+    <p>BatchSandbox<br>Pool<br>SandboxSnapshot</p>
+  </div>
+</div>
+
+<div class="table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-top:16px;">
+<table class="info-table">
+<thead><tr><th>Chart</th><th>版本</th><th>用途</th></tr></thead>
+<tbody>
+  <tr><td><code>opensandbox-controller</code></td><td>0.2.0</td><td>Operator: 管理 Pool、BatchSandbox、SandboxSnapshot CRD</td></tr>
+  <tr><td><code>opensandbox-server</code></td><td>0.1.0</td><td>生命周期 API Server + 可选 Ingress Gateway</td></tr>
+  <tr><td><code>opensandbox</code> (umbrella)</td><td>0.2.0</td><td>一键安装: 依赖上述两个子 Chart</td></tr>
+</tbody>
+</table>
+</div>
+</div></div>
+
+<!-- ═══════════ QUICK START ═══════════ -->
+<div class="container" id="quickstart">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Quick Start</div>
+<div class="section-header"><h2>🚀 快速开始</h2><p>选择最适合你的安装方式</p></div>
+
+<div class="tab-bar" style="max-width:500px;">
+  <button class="tab-btn active" onclick="showTab('helm-release')">📦 Helm Release</button>
+  <button class="tab-btn" onclick="showTab('helm-local')">📁 Helm Local</button>
+  <button class="tab-btn" onclick="showTab('kustomize')">🎨 Kustomize</button>
+  <button class="tab-btn" onclick="showTab('umbrella')">☂️ Umbrella</button>
+</div>
+
+<div id="tab-helm-release" class="tab-content">
+  <div class="code-block">
+    <span class="lang-tag">Shell</span>
+    <pre><span class="cmt"># 从 GitHub Release 安装 Controller</span>
+helm install opensandbox-controller \
+  https://github.com/alibaba/OpenSandbox/releases/download/helm/opensandbox-controller/0.1.0/opensandbox-controller-0.1.0.tgz \
+  --namespace opensandbox-system \
+  --create-namespace
+  
+<span class="cmt"># 自定义镜像</span>
+helm install opensandbox-controller \
+  https://github.com/alibaba/OpenSandbox/releases/download/helm/opensandbox-controller/0.1.0/opensandbox-controller-0.1.0.tgz \
+  --set controller.image.repository=<span class="str">&lt;your-registry&gt;</span>/controller \
+  --set controller.image.tag=<span class="str">v0.0.1</span> \
+  --namespace opensandbox-system --create-namespace</pre>
+  </div>
+</div>
+
+<div id="tab-helm-local" class="tab-content" style="display:none;">
+  <div class="code-block">
+    <span class="lang-tag">Shell</span>
+    <pre><span class="cmt"># 构建镜像</span>
+<span class="kw">cd</span> kubernetes
+COMPONENT=controller TAG=v0.0.1 ./build.sh
+COMPONENT=task-executor TAG=v0.0.1 ./build.sh
+
+<span class="cmt"># 从本地 Chart 安装</span>
+helm install opensandbox-controller ./charts/opensandbox-controller \
+  --set controller.image.repository=<span class="str">&lt;your-registry&gt;</span>/controller \
+  --set controller.image.tag=<span class="str">v0.0.1</span> \
+  --namespace opensandbox-system --create-namespace</pre>
+  </div>
+</div>
+
+<div id="tab-kustomize" class="tab-content" style="display:none;">
+  <div class="code-block">
+    <span class="lang-tag">Shell</span>
+    <pre><span class="cmt"># 构建 + 安装 CRD + 部署</span>
+<span class="kw">cd</span> kubernetes
+make docker-build docker-push CONTROLLER_IMG=<span class="str">&lt;registry&gt;</span>/controller:tag
+make docker-build-task-executor docker-push-task-executor TASK_EXECUTOR_IMG=<span class="str">&lt;registry&gt;</span>/task-executor:tag
+make install    <span class="cmt"># 安装 CRD</span>
+make deploy CONTROLLER_IMG=<span class="str">&lt;registry&gt;</span>/controller:tag</pre>
+  </div>
+</div>
+
+<div id="tab-umbrella" class="tab-content" style="display:none;">
+  <div class="code-block">
+    <span class="lang-tag">Shell</span>
+    <pre><span class="cmt"># Controller + Server 一键安装</span>
+<span class="kw">cd</span> kubernetes/charts
+helm dependency build opensandbox
+helm install opensandbox ./opensandbox \
+  --namespace opensandbox-system --create-namespace</pre>
+  </div>
+</div>
+
+<div class="note tip" style="margin-top:16px;">
+  <strong>✅ 验证安装</strong><br>
+  <code style="background:rgba(0,224,160,0.1);color:var(--green);">kubectl get pods -n opensandbox-system</code> &nbsp;|&nbsp;
+  <code style="background:rgba(0,224,160,0.1);color:var(--green);">kubectl get crd | grep opensandbox</code>
+</div>
+</div></div>
+
+<!-- ═══════════ HELM VALUES ═══════════ -->
+<div class="container" id="charts">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Helm Charts</div>
+<div class="section-header"><h2>📊 Controller Chart Values</h2><p>opensandbox-controller 完整可配参数</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">🐳</div><div><div class="card-title">镜像 & 副本</div></div></div>
+    <div class="card-body">
+    <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+    <table class="info-table">
+      <thead><tr><th style="width:170px;">参数</th><th>默认值</th></tr></thead>
+      <tbody>
+        <tr><td><code>controller.image.repository</code></td><td>sandbox-registry.cn-zhangjiakou.cr.aliyuncs.com/opensandbox/controller</td></tr>
+        <tr><td><code>controller.image.pullPolicy</code></td><td>IfNotPresent</td></tr>
+        <tr><td><code>controller.image.tag</code></td><td>"" (defaults to Chart.appVersion)</td></tr>
+        <tr><td><code>controller.replicaCount</code></td><td>1</td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">⚙️</div><div><div class="card-title">运行时 & 资源</div></div></div>
+    <div class="card-body">
+    <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+    <table class="info-table">
+      <thead><tr><th style="width:170px;">参数</th><th>默认值</th></tr></thead>
+      <tbody>
+        <tr><td><code>controller.logLevel</code></td><td>info</td></tr>
+        <tr><td><code>controller.kubeClient.qps</code></td><td>100</td></tr>
+        <tr><td><code>controller.kubeClient.burst</code></td><td>200</td></tr>
+        <tr><td><code>controller.leaderElection.enabled</code></td><td>true</td></tr>
+        <tr><td><code>controller.resources.limits.cpu</code></td><td>500m</td></tr>
+        <tr><td><code>controller.resources.limits.memory</code></td><td>128Mi</td></tr>
+        <tr><td><code>controller.resources.requests.cpu</code></td><td>10m</td></tr>
+        <tr><td><code>controller.resources.requests.memory</code></td><td>64Mi</td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-icon orange">📸</div><div><div class="card-title">快照配置 (Pause/Resume)</div></div></div>
+    <div class="card-body">
+    <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+    <table class="info-table">
+      <thead><tr><th style="width:200px;">参数</th><th>默认值</th></tr></thead>
+      <tbody>
+        <tr><td><code>controller.snapshot.imageCommitterImage</code></td><td>sandbox-registry.../image-committer:v0.1.0</td></tr>
+        <tr><td><code>controller.snapshot.containerdSocketPath</code></td><td>/var/run/containerd/containerd.sock</td></tr>
+        <tr><td><code>controller.snapshot.commitJobTimeout</code></td><td>10m</td></tr>
+        <tr><td><code>controller.snapshot.registry</code></td><td>"" <span class="tag warn">必配</span></td></tr>
+        <tr><td><code>controller.snapshot.registryInsecure</code></td><td>false</td></tr>
+        <tr><td><code>controller.snapshot.snapshotPushSecret</code></td><td>""</td></tr>
+        <tr><td><code>controller.snapshot.resumePullSecret</code></td><td>""</td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-icon purple">🛡️</div><div><div class="card-title">安全 & RBAC</div></div></div>
+    <div class="card-body">
+    <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+    <table class="info-table">
+      <thead><tr><th style="width:170px;">参数</th><th>默认值</th></tr></thead>
+      <tbody>
+        <tr><td><code>controller.podSecurityContext.runAsNonRoot</code></td><td>true</td></tr>
+        <tr><td><code>controller.podSecurityContext.seccompProfile.type</code></td><td>RuntimeDefault</td></tr>
+        <tr><td><code>controller.containerSecurityContext.allowPrivilegeEscalation</code></td><td>false</td></tr>
+        <tr><td><code>controller.containerSecurityContext.capabilities.drop</code></td><td>["ALL"]</td></tr>
+        <tr><td><code>controller.containerSecurityContext.readOnlyRootFilesystem</code></td><td>false</td></tr>
+        <tr><td><code>rbac.create</code></td><td>true</td></tr>
+        <tr><td><code>crds.install</code></td><td>true</td></tr>
+        <tr><td><code>crds.keep</code></td><td>true</td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════════ CRDs ═══════════ -->
+<div class="container" id="crds">
+<div class="section" style="padding-top:0;">
+<div class="section-label">CRDs</div>
+<div class="section-header"><h2>📜 CRD 安装</h2><p>三种自定义资源，Helm 自动安装</p></div>
+
+<div class="grid-3">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">📦</div><div><div class="card-title">BatchSandbox</div><div class="card-sub">sandbox.opensandbox.io/v1alpha1</div></div></div>
+    <div class="card-body"><ul>
+      <li>沙箱 Pod 组 + 可选 Task Workload</li>
+      <li>支持 Pool 模式 (poolRef) 和非 Pool 模式 (template)</li>
+      <li>声明式 Pause/Resume (spec.pause)</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon orange">🔥</div><div><div class="card-title">Pool</div><div class="card-sub">sandbox.opensandbox.io/v1alpha1</div></div></div>
+    <div class="card-body"><ul>
+      <li>预热 Pod 池 · 四参数容量模型</li>
+      <li>自动扩缩 + 滚动更新</li>
+      <li>RecycleStrategy: Delete / Restart / Noop</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">📸</div><div><div class="card-title">SandboxSnapshot</div><div class="card-sub">sandbox.opensandbox.io/v1alpha1</div></div></div>
+    <div class="card-body"><ul>
+      <li>原子快照操作 · Pending → Committing → Succeed</li>
+      <li>Rootfs → OCI 镜像 · commit Job</li>
+      <li>OwnerRef 级联清理</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="note info" style="margin-top:20px;">
+  <strong>⚙️ 安装方式</strong><br>
+  Helm 默认自动安装 (<code>crds.install: true</code>)。手动安装: <code>make install</code> (Kustomize) 或 <code>kubectl apply -f kubernetes/config/crd/bases/</code><br>
+  <strong>卸载保留</strong>: <code>crds.keep: true</code> → 添加 <code>helm.sh/resource-policy: keep</code> 注解
+</div>
+
+<div class="code-block" style="margin-top:16px;">
+  <span class="lang-tag">Shell</span>
+  <pre><span class="cmt"># 手动删除 CRD (会级联删除所有相关资源)</span>
+kubectl delete crd batchsandboxes.sandbox.opensandbox.io
+kubectl delete crd pools.sandbox.opensandbox.io
+kubectl delete crd sandboxsnapshots.sandbox.opensandbox.io</pre>
+</div>
+</div></div>
+
+<!-- ═══════════ SERVER DEPLOY ═══════════ -->
+<div class="container" id="server">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Server Deployment</div>
+<div class="section-header"><h2>🖥️ Server 部署</h2><p>安装生命周期 API Server + 可选 Ingress Gateway</p></div>
+
+<div class="step-list">
+  <div class="step-item">
+    <h4>基本安装</h4>
+    <div class="code-block" style="margin-top:8px;">
+      <span class="lang-tag">Shell</span>
+      <pre>helm install opensandbox-server ./kubernetes/charts/opensandbox-server \
+  --namespace opensandbox-system --create-namespace</pre>
+    </div>
+  </div>
+  <div class="step-item">
+    <h4>带 Ingress Gateway</h4>
+    <div class="code-block" style="margin-top:8px;">
+      <span class="lang-tag">Shell</span>
+      <pre>helm install opensandbox-server ./kubernetes/charts/opensandbox-server \
+  --namespace opensandbox-system --create-namespace \
+  --set server.gateway.enabled=<span class="num">true</span> \
+  --set server.gateway.host=<span class="str">gateway.example.com</span> \
+  --set server.gateway.gatewayRouteMode=<span class="str">header</span></pre>
+    </div>
+  </div>
+  <div class="step-item">
+    <h4>设置 API Key (生产必须)</h4>
+    <div class="code-block" style="margin-top:8px;">
+      <span class="lang-tag">Shell</span>
+      <pre>helm install opensandbox-server ./kubernetes/charts/opensandbox-server \
+  --set server.env[<span class="num">0</span>].name=<span class="str">OPENSANDBOX_SERVER_API_KEY</span> \
+  --set server.env[<span class="num">0</span>].value=<span class="str">"your-secret-key"</span></pre>
+    </div>
+  </div>
+  <div class="step-item">
+    <h4>Port-Forward 本地访问</h4>
+    <div class="code-block" style="margin-top:8px;">
+      <span class="lang-tag">Shell</span>
+      <pre>kubectl port-forward -n opensandbox-system svc/opensandbox-server <span class="num">8080</span>:<span class="num">80</span></pre>
+    </div>
+  </div>
+</div>
+
+<div class="note info" style="margin-top:20px;">
+  <strong>📝 Server Config TOML</strong> — 通过 ConfigMap 挂载到 <code>/etc/opensandbox/config.toml</code><br>
+  关键配置: <code>[runtime] type = "kubernetes"</code> · <code>[kubernetes] workload_provider = "batchsandbox"</code>
+</div>
+
+<div class="grid-2" style="margin-top:20px;">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">🌐</div><div><div class="card-title">Gateway Values</div></div></div>
+    <div class="card-body">
+    <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+    <table class="info-table">
+      <thead><tr><th style="width:170px;">参数</th><th>默认值</th></tr></thead>
+      <tbody>
+        <tr><td><code>server.gateway.enabled</code></td><td>false</td></tr>
+        <tr><td><code>server.gateway.host</code></td><td>opensandbox.example.com</td></tr>
+        <tr><td><code>server.gateway.gatewayRouteMode</code></td><td>header</td></tr>
+        <tr><td><code>server.gateway.port</code></td><td>28888</td></tr>
+        <tr><td><code>server.gateway.dataplaneNamespace</code></td><td>opensandbox</td></tr>
+        <tr><td><code>server.gateway.providerType</code></td><td>batchsandbox</td></tr>
+        <tr><td><code>server.gateway.secureAccess.activeKey</code></td><td>""</td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">⚙️</div><div><div class="card-title">K8s Config 核心参数</div></div></div>
+    <div class="card-body">
+    <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+    <table class="info-table">
+      <thead><tr><th style="width:170px;">参数</th><th>默认值</th></tr></thead>
+      <tbody>
+        <tr><td><code>[kubernetes] namespace</code></td><td>opensandbox</td></tr>
+        <tr><td><code>[kubernetes] workload_provider</code></td><td>batchsandbox</td></tr>
+        <tr><td><code>[kubernetes] informer_enabled</code></td><td>true</td></tr>
+        <tr><td><code>[kubernetes] sandbox_create_timeout_seconds</code></td><td>60</td></tr>
+        <tr><td><code>[kubernetes] snapshot_create_timeout_seconds</code></td><td>900</td></tr>
+        <tr><td><code>[ingress] mode</code></td><td>direct</td></tr>
+        <tr><td><code>[egress] mode</code></td><td>dns+nft</td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════════ SNAPSHOT REGISTRY ═══════════ -->
+<div class="container" id="snapshot">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Snapshot Registry</div>
+<div class="section-header"><h2>📸 快照 Registry 配置</h2><p>启用 Pause/Resume 功能需要 OCI Registry</p></div>
+
+<div class="step-list">
+  <div class="step-item">
+    <h4>创建 Push/Pull Secret</h4>
+    <div class="code-block" style="margin-top:8px;">
+      <span class="lang-tag">Shell</span>
+      <pre><span class="cmt"># Push secret</span>
+kubectl create secret docker-registry registry-snapshot-push-secret \
+  --docker-server=<span class="str">&lt;your-registry&gt;</span> \
+  --docker-username=<span class="str">&lt;user&gt;</span> \
+  --docker-password=<span class="str">&lt;token&gt;</span>
+
+<span class="cmt"># Pull secret</span>
+kubectl create secret docker-registry registry-pull-secret \
+  --docker-server=<span class="str">&lt;your-registry&gt;</span> \
+  --docker-username=<span class="str">&lt;user&gt;</span> \
+  --docker-password=<span class="str">&lt;token&gt;</span></pre>
+    </div>
+  </div>
+  <div class="step-item">
+    <h4>Controller 配置</h4>
+    <div class="code-block" style="margin-top:8px;">
+      <span class="lang-tag">YAML</span>
+      <pre><span class="kw">controller:</span>
+  <span class="kw">snapshot:</span>
+    <span class="kw">registry:</span> <span class="str">"&lt;your-registry&gt;/sandboxes"</span>
+    <span class="kw">registryInsecure:</span> <span class="num">true</span>   <span class="cmt"># HTTP / 自签名 Registry</span>
+    <span class="kw">snapshotPushSecret:</span> <span class="str">"registry-snapshot-push-secret"</span>
+    <span class="kw">resumePullSecret:</span> <span class="str">"registry-pull-secret"</span></pre>
+    </div>
+  </div>
+</div>
+
+<div class="note warn" style="margin-top:16px;">
+  <strong>⚠️ 安全提醒</strong><br>
+  Commit Job 挂载 Host containerd socket，生产环境必须 pin <code>image-committer-image</code> by digest，并限制 Trusted Registries。<br>
+  删除 SandboxSnapshot CR <strong>不会</strong> 删除已推送的 OCI 镜像，需单独管理镜像生命周期。
+</div>
+</div></div>
+
+<!-- ═══════════ RBAC ═══════════ -->
+<div class="container" id="rbac">
+<div class="section" style="padding-top:0;">
+<div class="section-label">RBAC</div>
+<div class="section-header"><h2>🔑 RBAC 权限</h2><p>Controller 和 Server 所需的最小权限集</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">🎛️</div><div><div class="card-title">Controller ClusterRole</div></div></div>
+    <div class="card-body">
+    <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+    <table class="info-table">
+      <thead><tr><th>Resource</th><th>Verbs</th></tr></thead>
+      <tbody>
+        <tr><td>pods, events</td><td>全部 CRUD</td></tr>
+        <tr><td>pods/status</td><td>get, patch, update</td></tr>
+        <tr><td>secrets, configmaps</td><td>get, list, watch</td></tr>
+        <tr><td>jobs, jobs/status</td><td>全部 CRUD</td></tr>
+        <tr><td>batchsandboxes, pools, sandboxsnapshots</td><td>全部 CRUD</td></tr>
+        <tr><td>*/finalizers, */status</td><td>update / get, patch</td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon purple">🖥️</div><div><div class="card-title">Server ClusterRole</div></div></div>
+    <div class="card-body">
+    <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+    <table class="info-table">
+      <thead><tr><th>Resource</th><th>Verbs</th></tr></thead>
+      <tbody>
+        <tr><td>pods, pods/status, events, services, configmaps</td><td>全部 CRUD</td></tr>
+        <tr><td>secrets</td><td>create, delete, get</td></tr>
+        <tr><td>persistentvolumeclaims</td><td>create, delete, get, list, patch</td></tr>
+        <tr><td>runtimeclasses</td><td>get, list</td></tr>
+        <tr><td>batchsandboxes, pools, sandboxsnapshots</td><td>全部 CRUD + status + finalizers</td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════════ SAMPLE RESOURCES ═══════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Samples</div>
+<div class="section-header"><h2>📝 示例资源</h2><p>快速创建 Pool 和 BatchSandbox</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon orange">🔥</div><div><div class="card-title">创建 Pool</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">YAML</span>
+        <pre><span class="kw">apiVersion:</span> sandbox.opensandbox.io/v1alpha1
+<span class="kw">kind:</span> Pool
+<span class="kw">metadata:</span>
+  <span class="kw">name:</span> example-pool
+  <span class="kw">namespace:</span> opensandbox
+<span class="kw">spec:</span>
+  <span class="kw">template:</span>
+    <span class="kw">spec:</span>
+      <span class="kw">containers:</span>
+      <span class="kw">- name:</span> sandbox
+        <span class="kw">image:</span> nginx:latest
+  <span class="kw">capacitySpec:</span>
+    <span class="kw">bufferMax:</span> <span class="num">10</span>
+    <span class="kw">bufferMin:</span> <span class="num">2</span>
+    <span class="kw">poolMax:</span> <span class="num">20</span>
+    <span class="kw">poolMin:</span> <span class="num">5</span></pre>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">📦</div><div><div class="card-title">创建 BatchSandbox (Pooled + Task)</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">YAML</span>
+        <pre><span class="kw">apiVersion:</span> sandbox.opensandbox.io/v1alpha1
+<span class="kw">kind:</span> BatchSandbox
+<span class="kw">metadata:</span>
+  <span class="kw">name:</span> my-sandbox
+  <span class="kw">namespace:</span> opensandbox
+<span class="kw">spec:</span>
+  <span class="kw">poolRef:</span> example-pool        <span class="cmt"># 使用 Pool</span>
+  <span class="kw">replicas:</span> <span class="num">3</span>
+  <span class="kw">taskTemplate:</span>               <span class="cmt"># 可选</span>
+    <span class="kw">spec:</span>
+      <span class="kw">process:</span>
+        <span class="kw">command:</span> [<span class="str">"sleep"</span>]
+        <span class="kw">args:</span> [<span class="str">"infinity"</span>]</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note tip" style="margin-top:16px;">
+  <strong>💡 监控命令</strong><br>
+  <code style="background:rgba(0,224,160,0.1);color:var(--green);">kubectl get pools -A</code> &nbsp;
+  <code style="background:rgba(0,224,160,0.1);color:var(--green);">kubectl get batchsandboxes -A</code> &nbsp;
+  <code style="background:rgba(0,224,160,0.1);color:var(--green);">kubectl describe pool example-pool</code>
+</div>
+</div></div>
+
+<!-- ═══════════ E2E ═══════════ -->
+<div class="container" id="e2e">
+<div class="section" style="padding-top:0;">
+<div class="section-label">E2E Testing</div>
+<div class="section-header"><h2>🧪 E2E 测试</h2><p>Kind + Ginkgo 端到端测试</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">🧪</div><div><div class="card-title">执行测试</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Shell</span>
+        <pre><span class="kw">cd</span> kubernetes
+make test-e2e              <span class="cmt"># 全量: core + task + gVisor</span>
+make test-e2e-main         <span class="cmt"># 仅核心测试</span>
+
+<span class="cmt"># 聚焦特定测试</span>
+make test-e2e GINKGO_ARGS=<span class="str">"-ginkgo.focus='Pool'"</span></pre>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">🐳</div><div><div class="card-title">Kind 调试集群</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Shell</span>
+        <pre><span class="cmt"># 创建 Kind 集群</span>
+kind create cluster --name sandbox-k8s-test-e2e \
+  --image kindest/node:v1.22.4
+
+<span class="cmt"># 加载镜像</span>
+kind load docker-image &lt;image&gt; \
+  --name sandbox-k8s-test-e2e
+
+<span class="cmt"># 清理</span>
+kind delete cluster --name sandbox-k8s-test-e2e</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note info" style="margin-top:16px;">
+  <strong>⚙️ E2E 模式</strong>: 默认 <code>E2E_MODE=kind</code> 自动创建集群 · <code>E2E_MODE=external</code> 使用当前 KUBECONFIG<br>
+  <strong>镜像覆盖</strong>: <code>CONTROLLER_IMG</code> · <code>TASK_EXECUTOR_IMG</code> · <code>IMAGE_COMMITTER_IMG</code> 等环境变量
+</div>
+</div></div>
+
+<!-- ═══════════ UPGRADE / UNINSTALL ═══════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Lifecycle</div>
+<div class="section-header"><h2>🔄 升级 / 回滚 / 卸载</h2></div>
+
+<div class="grid-3">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">⬆️</div><div><div class="card-title">升级</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Shell</span>
+        <pre>helm upgrade opensandbox-controller \
+  ./charts/opensandbox-controller \
+  --namespace opensandbox-system \
+  -f custom-values.yaml</pre>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon orange">↩️</div><div><div class="card-title">回滚</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Shell</span>
+        <pre>helm rollback opensandbox-controller \
+  -n opensandbox-system
+helm rollback opensandbox-controller \
+  <span class="num">1</span> -n opensandbox-system</pre>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon pink">🗑️</div><div><div class="card-title">卸载</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Shell</span>
+        <pre>helm uninstall opensandbox-controller \
+  -n opensandbox-system
+
+<span class="cmt"># CRD 默认保留，手动删除:</span>
+kubectl delete crd \
+  batchsandboxes.sandbox.opensandbox.io
+kubectl delete crd \
+  pools.sandbox.opensandbox.io
+kubectl delete crd \
+  sandboxsnapshots.sandbox.opensandbox.io</pre>
+      </div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════════ TROUBLESHOOTING ═══════════ -->
+<div class="container" id="trouble">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Troubleshooting</div>
+<div class="section-header"><h2>🔧 故障排查</h2></div>
+
+<div class="code-block">
+  <span class="lang-tag">Shell</span>
+  <pre><span class="cmt"># Controller 日志</span>
+kubectl logs -n opensandbox-system -l control-plane=controller-manager -f
+
+<span class="cmt"># Pod 详情</span>
+kubectl describe pod -n opensandbox-system -l control-plane=controller-manager
+
+<span class="cmt"># CRD 验证</span>
+kubectl get crd batchsandboxes.sandbox.opensandbox.io -o yaml
+
+<span class="cmt"># 分配注解</span>
+kubectl get batchsandbox &lt;name&gt; -n &lt;ns&gt; \
+  -o jsonpath=<span class="str">'{.metadata.annotations.sandbox\.opensandbox\.io/alloc-status}'</span>
+
+<span class="cmt"># RBAC 检查</span>
+kubectl auth can-i --as=system:serviceaccount:opensandbox-system:&lt;sa&gt; create pods
+
+<span class="cmt"># Chart 验证</span>
+make helm-lint
+make helm-template-debug
+
+<span class="cmt"># Kind 集群管理</span>
+kind get clusters
+kind delete cluster --name sandbox-k8s-test-e2e</pre>
+</div>
+
+<div class="note warn" style="margin-top:16px;">
+  <strong>⚠️ 常见约束</strong><br>
+  · Pause/Resume 仅支持 <code>replicas=1</code> 的 BatchSandbox<br>
+  · <code>make deploy</code> 只更新 Controller 镜像，Task Executor 需单独发布<br>
+  · Server API Key 为空时需设置 <code>OPENSANDBOX_INSECURE_SERVER=YES</code> (非交互环境)<br>
+  · Snapshot 镜像生命周期由 Registry 管理，不随 CR 删除
+</div>
+</div></div>
+
+<footer class="footer">
+  <p>OpenSandbox — <a href="https://github.com/alibaba/OpenSandbox" target="_blank">github.com/alibaba/OpenSandbox</a></p>
+  <p style="margin-top:8px;">Kubernetes Runtime · Helm + CRD · K8s ≥ 1.21</p>
+</footer>
+
+<script>
+function showTab(tabId) {
+  document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-'+tabId).style.display = 'block';
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

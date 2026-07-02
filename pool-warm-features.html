@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenSandbox — Pool 预热机制 (Warm Pool)</title>
+<style>
+  :root {
+    --bg: #07070d;
+    --surface: #111118;
+    --surface2: #181825;
+    --border: #252540;
+    --text: #e8e8f4;
+    --text2: #8e8eb8;
+    --accent: #f0a030;
+    --accent2: #ffc060;
+    --green: #00e0a0;
+    --blue: #5ea0ff;
+    --orange: #ffa050;
+    --pink: #ff6b8a;
+    --red: #f06070;
+    --yellow: #fed040;
+    --cyan: #00d8d8;
+    --purple: #a78bfa;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow: 0 12px 48px rgba(0,0,0,0.35);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    overflow-x: hidden;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    position: relative; padding: 100px 24px 80px; text-align: center; overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(240,160,48,0.22), transparent 70%),
+                radial-gradient(ellipse 50% 40% at 25% 85%, rgba(0,224,160,0.10), transparent 60%),
+                radial-gradient(ellipse 40% 35% at 80% 75%, rgba(94,160,255,0.10), transparent 60%);
+  }
+  .hero-content { position:relative; z-index:1; max-width:800px; margin:0 auto; }
+  .hero-badge {
+    display:inline-flex; align-items:center; gap:8px; padding:6px 16px;
+    border-radius:99px; font-size:13px; font-weight:600;
+    background:rgba(240,160,48,0.14); color:var(--accent2);
+    border:1px solid rgba(240,160,48,0.3); margin-bottom:20px;
+  }
+  .hero h1 { font-size:clamp(32px,5vw,56px); font-weight:800; letter-spacing:-1.5px; margin-bottom:12px; }
+  .hero h1 span { background:linear-gradient(135deg,var(--accent),var(--green),var(--blue)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .hero p { font-size:17px; color:var(--text2); max-width:580px; margin:0 auto 28px; }
+  .hero-stats { display:flex; justify-content:center; gap:44px; flex-wrap:wrap; }
+  .hero-stat { text-align:center; }
+  .hero-stat .num { font-size:28px; font-weight:800; color:var(--accent2); }
+  .hero-stat .lbl { font-size:12px; color:var(--text2); margin-top:2px; }
+
+  /* ── Layout ── */
+  .container { max-width:1160px; margin:0 auto; padding:0 24px; }
+  .section { padding:72px 0; }
+  .section-label {
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+    text-transform:uppercase; letter-spacing:1px; color:var(--accent2); margin-bottom:8px;
+  }
+  .section-label::before { content:''; width:4px; height:4px; border-radius:50%; background:var(--accent); }
+  .section-header { margin-bottom:48px; }
+  .section-header h2 { font-size:26px; font-weight:700; margin-bottom:6px; }
+  .section-header p { color:var(--text2); font-size:14px; max-width:600px; }
+
+  /* ── Swimlane ── */
+  .swimlane {
+    display:flex; flex-direction:column; gap:0;
+    border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; background:var(--surface); margin-bottom:24px;
+  }
+  .swimlane-row {
+    display:grid; grid-template-columns:130px 1fr;
+    border-bottom:1px solid var(--border); min-height:52px;
+  }
+  .swimlane-row:last-child { border-bottom:none; }
+  .swimlane-actor {
+    padding:16px; border-right:1px solid var(--border);
+    font-size:13px; font-weight:600; display:flex; align-items:flex-start; gap:8px;
+  }
+  .swimlane-steps { padding:12px 16px; display:flex; flex-direction:column; gap:8px; overflow-x:auto; }
+  .step {
+    display:flex; align-items:flex-start; gap:12px; padding:10px 14px;
+    background:var(--surface2); border-radius:var(--radius-sm);
+    border:1px solid transparent; transition:all .2s;
+  }
+  .step:hover { border-color:var(--border); }
+  .step-num {
+    width:28px; height:28px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:800;
+    background:rgba(240,160,48,0.15); color:var(--accent2);
+  }
+  .step-num.green { background:rgba(0,224,160,0.15); color:var(--green); }
+  .step-num.blue { background:rgba(94,160,255,0.15); color:var(--blue); }
+  .step-num.pink { background:rgba(255,107,138,0.15); color:var(--pink); }
+  .step-body { flex:1; }
+  .step-body .title { font-size:14px; font-weight:600; margin-bottom:2px; }
+  .step-body .desc { font-size:12px; color:var(--text2); }
+  .step-body code {
+    background:rgba(240,160,48,0.1); color:var(--accent2);
+    padding:1px 6px; border-radius:4px; font-size:11px;
+  }
+
+  /* ── Vertical Flow ── */
+  .vflow { display:flex; flex-direction:column; gap:0; max-width:900px; margin:0 auto; }
+  .vflow-step {
+    display:flex; gap:16px; align-items:flex-start; padding:16px 0; position:relative;
+    border-left:2px solid var(--border); margin-left:18px; padding-left:32px;
+  }
+  .vflow-step:first-child { border-left-color:var(--accent); }
+  .vflow-step:last-child { border-left-color:transparent; }
+  .vflow-dot {
+    position:absolute; left:-9px; top:20px;
+    width:16px; height:16px; border-radius:50%; background:var(--accent);
+    border:3px solid var(--bg);
+  }
+  .vflow-dot.green { background:var(--green); }
+  .vflow-dot.blue { background:var(--blue); }
+  .vflow-dot.pink { background:var(--pink); }
+  .vflow-dot.purple { background:var(--purple); }
+  .vflow-content {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:16px 20px; flex:1;
+  }
+  .vflow-content .phase {
+    display:inline-block; padding:3px 10px; border-radius:99px;
+    font-size:11px; font-weight:700; margin-bottom:8px;
+    background:rgba(240,160,48,0.12); color:var(--accent2);
+  }
+  .vflow-content .phase.green { background:rgba(0,224,160,0.12); color:var(--green); }
+  .vflow-content .phase.blue { background:rgba(94,160,255,0.12); color:var(--blue); }
+  .vflow-content .phase.purple { background:rgba(167,139,250,0.12); color:var(--purple); }
+  .vflow-content .phase.pink { background:rgba(255,107,138,0.12); color:var(--pink); }
+  .vflow-content h4 { font-size:15px; font-weight:700; margin-bottom:4px; }
+  .vflow-content p { font-size:13px; color:var(--text2); }
+  .vflow-content .note {
+    margin-top:8px; padding:8px 12px; background:rgba(240,160,48,0.06);
+    border-radius:6px; font-size:12px; color:var(--text2);
+    border-left:2px solid var(--accent);
+  }
+
+  /* ── Grid ── */
+  .grid-2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:20px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px; }
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; transition:all .25s;
+  }
+  .card:hover { border-color:rgba(240,160,48,0.4); transform:translateY(-2px); box-shadow:var(--shadow); }
+  .card-header { padding:20px 24px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--border); }
+  .card-icon { width:40px; height:40px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .card-icon.orange { background:rgba(240,160,48,0.15); color:var(--accent2); }
+  .card-icon.green { background:rgba(0,224,160,0.15); color:var(--green); }
+  .card-icon.blue { background:rgba(94,160,255,0.15); color:var(--blue); }
+  .card-icon.purple { background:rgba(167,139,250,0.15); color:var(--purple); }
+  .card-icon.pink { background:rgba(255,107,138,0.15); color:var(--pink); }
+  .card-icon.cyan { background:rgba(0,216,216,0.15); color:var(--cyan); }
+  .card-title { font-size:15px; font-weight:700; }
+  .card-sub { font-size:12px; color:var(--text2); }
+  .card-body { padding:16px 24px 20px; }
+  .card-body ul { list-style:none; display:flex; flex-direction:column; gap:6px; }
+  .card-body li { position:relative; padding-left:18px; font-size:13px; color:var(--text2); }
+  .card-body li::before { content:''; position:absolute; left:0; top:7px; width:5px; height:5px; border-radius:50%; background:var(--accent); opacity:.5; }
+  .card-body li strong { color:var(--text); font-weight:600; }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x:auto; }
+  .info-table { width:100%; border-collapse:collapse; min-width:500px; }
+  .info-table th {
+    text-align:left; padding:10px 14px; font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.5px; color:var(--text2);
+    border-bottom:1px solid var(--border);
+  }
+  .info-table td { padding:10px 14px; font-size:13px; border-bottom:1px solid var(--border); }
+  .info-table tr:last-child td { border-bottom:none; }
+
+  /* ── Tag ── */
+  .tag {
+    display:inline-flex; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:700;
+  }
+  .tag.ok { background:rgba(0,224,160,0.12); color:var(--green); }
+  .tag.warn { background:rgba(255,160,80,0.12); color:var(--orange); }
+
+  /* ── Code ── */
+  .code-block {
+    background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:16px 20px; overflow-x:auto; margin-top:12px;
+  }
+  .code-block pre { font-family:'SF Mono','Fira Code',monospace; font-size:12px; line-height:1.7; color:var(--text); }
+  .code-block .kw { color:var(--pink); }
+  .code-block .str { color:var(--green); }
+  .code-block .cmt { color:var(--text2); }
+  .code-block .fn { color:var(--blue); }
+
+  /* ── Capacity Diagram ── */
+  .capacity-box {
+    position:relative; height:60px; background:var(--surface2); border:1px solid var(--border);
+    border-radius:var(--radius-sm); overflow:hidden; margin:12px 0;
+  }
+  .capacity-bar {
+    position:absolute; top:0; left:0; height:100%; border-radius:var(--radius-sm);
+    transition:width .5s;
+  }
+  .capacity-bar.alloc { background:rgba(240,160,48,0.35); z-index:1; }
+  .capacity-bar.buffer { background:rgba(0,224,160,0.25); z-index:2; }
+  .capacity-labels { display:flex; justify-content:space-between; font-size:11px; color:var(--text2); margin-top:6px; }
+  .capacity-labels span { text-align:center; }
+
+  /* ── Equation ── */
+  .equation {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:16px 20px; margin:8px 0; font-family:'SF Mono','Fira Code',monospace;
+    font-size:13px; text-align:center; color:var(--text);
+  }
+  .equation .hl { color:var(--accent2); }
+  .equation .hlg { color:var(--green); }
+
+  /* ── Watch Chain ── */
+  .watch-chain {
+    display:flex; flex-direction:column; gap:8px; padding:16px;
+    background:var(--surface2); border-radius:var(--radius-sm);
+  }
+  .watch-item {
+    display:flex; align-items:flex-start; gap:10px; padding:8px 12px;
+    background:var(--surface); border:1px solid var(--border); border-radius:6px;
+  }
+  .watch-tag {
+    padding:2px 8px; border-radius:4px; font-size:10px; font-weight:700; flex-shrink:0;
+  }
+  .watch-tag.event { background:rgba(240,160,48,0.15); color:var(--accent2); }
+  .watch-tag.filter { background:rgba(94,160,255,0.15); color:var(--blue); }
+
+  @media (max-width:768px) {
+    .swimlane { flex-direction:column; }
+    .swimlane-row { grid-template-columns:1fr; }
+    .swimlane-actor { border-right:none; border-bottom:1px solid var(--border); }
+    .grid-2, .grid-3 { grid-template-columns:1fr; }
+    .hero { padding:60px 16px 48px; }
+  }
+
+  .footer {
+    text-align:center; padding:48px 24px; color:var(--text2); font-size:13px;
+    border-top:1px solid var(--border); margin-top:40px;
+  }
+  .footer a { color:var(--accent2); text-decoration:none; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════ HERO ════════════════ -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">🔥 Pool Pre-Warming · 亚秒级沙箱分配</div>
+    <h1>Pool<span> 预热</span>机制</h1>
+    <p>预创建 Pod 资源池，自动温度控制、智能选池、三阶段分配事务。<br>BatchSandbox 创建时亚秒级获得运行中的 Pod。</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">2</div><div class="lbl">Controller</div></div>
+      <div class="hero-stat"><div class="num">5</div><div class="lbl">Predicate</div></div>
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">分配阶段</div></div>
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">回收策略</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ ARCHITECTURE ════════════════ -->
+<div class="container">
+<div class="section">
+  <div class="section-label">Architecture</div>
+  <div class="section-header">
+    <h2>🏗️ 整体架构</h2>
+    <p>Pool Assign (选池) + Pool Controller (温控) + Allocator (分配器) 三层协作</p>
+  </div>
+
+  <div class="swimlane">
+    <div class="swimlane-row">
+      <div class="swimlane-actor" style="color:var(--purple);">🎯 Pool Assign<br><span style="font-size:11px;color:var(--text2);">选池</span></div>
+      <div class="swimlane-steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body"><div class="title">BatchSandbox 无 poolRef → 自动选池</div><div class="desc">ProfileStore 查 profile → List 所有 Pool → Predicate 链过滤 → Scorer 打分 → patch <code>spec.poolRef</code></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="swimlane-row">
+      <div class="swimlane-actor" style="color:var(--accent2);">🔥 Pool Controller<br><span style="font-size:11px;color:var(--text2);">温控</span></div>
+      <div class="swimlane-steps">
+        <div class="step"><div class="step-num green">2</div><div class="step-body"><div class="title">handleEviction</div><div class="desc">检查并逐出标记为驱逐的空闲 Pod，已分配 Pod 受保护</div></div></div>
+        <div class="step"><div class="step-num green">3</div><div class="step-body"><div class="title">scheduleSandbox → Allocator.Schedule()</div><div class="desc">遍历所有引用该 Pool 的 BatchSandbox → 计算缺额 → PackedSchedule 分配 → doAllocate 持久化</div></div></div>
+        <div class="step"><div class="step-num green">4</div><div class="step-body"><div class="title">updatePool</div><div class="desc">计算模板 revision (SHA-256) → 滚动更新旧 revision Pod</div></div></div>
+        <div class="step"><div class="step-num green">5</div><div class="step-body"><div class="title">scalePool — 温度控制</div><div class="desc">buffer 超范围回中 → desiredSchedulable 受限 poolMax + maxUnavailable</div></div></div>
+      </div>
+    </div>
+    <div class="swimlane-row">
+      <div class="swimlane-actor" style="color:var(--cyan);">📦 Allocator<br><span style="font-size:11px;color:var(--text2);">分配器</span></div>
+      <div class="swimlane-steps">
+        <div class="step"><div class="step-num blue">6</div><div class="step-body"><div class="title">双层状态: 内存 (快) + 注解 (持久)</div><div class="desc">InMemoryAllocationStore(pod→sandbox) + AnnoAllocationSyncer(BatchSandbox annotation)</div></div></div>
+        <div class="step"><div class="step-num blue">7</div><div class="step-body"><div class="title">Recover 恢复 (sync.Once)</div><div class="desc">Controller 重启时从所有 BatchSandbox 注解重建内存态 · 失败直接 os.Exit(1)</div></div></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ COMPLETE FLOW ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Full Interaction Flow</div>
+  <div class="section-header">
+    <h2>🔄 完整交互流程</h2>
+    <p>从创建 BatchSandbox 到 Pod 分配、Pool 自动扩缩的端到端流程</p>
+  </div>
+
+  <div class="vflow">
+    <div class="vflow-step">
+      <div class="vflow-dot"></div>
+      <div class="vflow-content">
+        <span class="phase">Step 1 — 用户创建 BatchSandbox</span>
+        <h4>POST /v1/sandboxes 或 kubectl apply BatchSandbox</h4>
+        <p>spec.replicas=3 · spec.template (含镜像+资源) · spec.poolRef 为空</p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot purple"></div>
+      <div class="vflow-content">
+        <span class="phase purple">Step 2 — BatchSandbox Controller: assignPool()</span>
+        <h4>自动选池 → patch spec.poolRef</h4>
+        <p>
+          ProfileStore.GetProfile("default") → DefaultAssigner.AssignPool()<br>
+          Predicate 链: <strong>Capacity ✓ → Image ✓ → Resource ✓ → NodeSelector ✓</strong><br>
+          Scorer ResBalance(LeastAllocated): 候选池中选负载最低的<br>
+          → patch <code>spec.poolRef = "pool-python"</code>
+        </p>
+        <div class="note">💡 如果 Sandbox 已有 <code>spec.poolRef</code> (手动指定)，跳过此步骤直接进入分配</div>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot green"></div>
+      <div class="vflow-content">
+        <span class="phase green">Step 3 — Pool Controller 被触发 (Watch)</span>
+        <h4>Pool Controller 监听到新 BatchSandbox → reconcilePool()</h4>
+        <p>Watches BatchSandbox (filter: poolRef!="") · 检测到新 Sandbox 引用本 Pool</p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot green"></div>
+      <div class="vflow-content">
+        <span class="phase green">Step 4 — scheduleSandbox: 计算分配</span>
+        <h4>Allocator.Schedule() → PackedSchedule 算法</h4>
+        <p>
+          SandboxRequest: allocated=0, replicas=3, supplement=3, toRelease=[]<br>
+          availablePods: Pool 中 Ready 且未分配的 Pod = [p1, p2, p3, p4, p5]<br>
+          → <strong>ToAllocate: {sandbox: [p1, p2, p3]}</strong> · PodSupplement: 0 · ToRelease: {}
+        </p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot blue"></div>
+      <div class="vflow-content">
+        <span class="phase blue">Step 5 — doAllocate: 持久化分配</span>
+        <h4>Phase 1: 内存更新 → Phase 2: 注解持久化 (失败回滚)</h4>
+        <p>
+          ① store.UpdateAllocation(p1→sbx, p2→sbx, p3→sbx)<br>
+          ② syncer.SetAllocation → patch BatchSandbox annotation:<br>
+          &nbsp;&nbsp;<code>alloc-status: {"pods":["p1","p2","p3"]}</code><br>
+          &nbsp;&nbsp;<code>finalizers: ["pool-allocation"]</code><br>
+          ③ 注解写入失败 → 回滚内存到旧状态
+        </p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot green"></div>
+      <div class="vflow-content">
+        <span class="phase green">Step 6 — scalePool: 温度调节</span>
+        <h4>buffer 超下限 → 扩容补足</h4>
+        <p>
+          状态: total=5 · allocated=3 · buffer=2 · bufferMin=3 → <strong>buffer &lt; min!</strong><br>
+          desiredBuffer = (3+8)/2 = <strong>5</strong><br>
+          desiredSchedulable = max(3+0+5, poolMin) = max(8, 5) = <strong>8</strong><br>
+          createCnt = min(8-5, poolMax-5, maxUnavailable-notReady) = <strong>2</strong><br>
+          → createPoolPod() × 2
+        </p>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ THERMOSTAT ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Core Mechanism</div>
+  <div class="section-header">
+    <h2>🌡️ 温度控制器 — Buffer 管理</h2>
+    <p>四参数自动调节，滞回避免震荡，两重限速保护</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><div class="card-icon orange">📐</div><div><div class="card-title">容量四参数模型</div><div class="card-sub">CapacitySpec</div></div></div>
+      <div class="card-body">
+        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:8px;">
+            <span>poolMin=5</span><span>bufferMin=2</span><span style="color:var(--accent2);">allocated=8</span><span>buffer=4</span><span>bufferMax=8</span><span>poolMax=50</span>
+          </div>
+          <div class="capacity-box" style="height:32px;">
+            <div class="capacity-bar alloc" style="width:16%;left:10%;"></div>
+            <div class="capacity-bar buffer" style="width:8%;left:26%;"></div>
+            <div style="position:absolute;left:10%;width:16%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;z-index:3;">allocated</div>
+          </div>
+          <div style="font-size:11px;color:var(--text2);margin-top:6px;text-align:center;">
+            total=12 ·&nbsp; <span style="color:var(--accent2);">allocated=8</span> ·&nbsp; <span style="color:var(--green);">buffer=4</span> ·&nbsp; poolMax=50
+          </div>
+        </div>
+        <ul>
+          <li><strong>bufferMin / bufferMax</strong> — 空闲缓冲窗口：低于 min 扩容，高于 max 缩容</li>
+          <li><strong>poolMin / poolMax</strong> — 池绝对上下限：硬约束，不可突破</li>
+          <li><strong>回中策略</strong> — 缓冲超范围时回到 <code>(min+max)/2</code>，非边界值</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-icon green">📈</div><div><div class="card-title">scalePool 决策公式</div><div class="card-sub">每次 reconcile 执行</div></div></div>
+      <div class="card-body">
+        <div class="equation">
+          <span class="cmt">// Step 1: 评估当前缓冲</span><br>
+          buffer = schedulable - allocated<br><br>
+          <span class="cmt">// Step 2: 决定目标缓冲</span><br>
+          <span class="kw">if</span> buffer &lt; <span class="hlg">bufferMin</span> <span class="kw">or</span> buffer &gt; <span class="hlg">bufferMax</span>:<br>
+          &nbsp;&nbsp;desiredBuffer = <span class="hl">(bufferMin + bufferMax) / 2</span><br>
+          <span class="kw">else</span>: desiredBuffer = buffer<br><br>
+          <span class="cmt">// Step 3: 计算期望总数</span><br>
+          desiredTotal = <span class="hl">max(allocated + supply + desiredBuffer, poolMin)</span><br>
+          maxNew = <span class="hl">max(poolMax - totalPodCnt, 0)</span><br>
+          limited = <span class="hl">maxUnavailable - notReadyCnt</span><br>
+          createCnt = <span class="hl">min(need, maxNew, limited)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-top:20px;">
+    <div class="card">
+      <div class="card-header"><div class="card-icon blue">🛡️</div><div><div class="card-title">两重扩容限速</div></div></div>
+      <div class="card-body"><ul>
+        <li><strong>硬上限</strong>: <code>PoolMax - totalPodCnt</code> — 绝对不可超越</li>
+        <li><strong>软限速</strong>: <code>maxUnavailable (默认 25%)</code> — 如 Deployment 滚动更新节奏</li>
+        <li><strong>notReady 计入</strong>: 未就绪 Pod 也计入不可用数 → 防过度扩容</li>
+        <li><strong>ScaleExpectation</strong>: 追踪创建中的 Pod，避免 reconcile 竞态</li>
+        <li>超时放弃: 如果 Expectation 未满足超过阈值 → 清除脏数据</li>
+      </ul></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-icon orange">📉</div><div><div class="card-title">缩容策略</div></div></div>
+      <div class="card-body"><ul>
+        <li><strong>优先级</strong>: 回收/升级标记 Pod > 空闲 Pod (最老优先)</li>
+        <li><strong>toDeletePods</strong>: 回收 handler 决定删除的 Pod</li>
+        <li><strong>idlePods</strong>: 未分配的空闲 Pod，按 <code>CreationTimestamp</code> 排序</li>
+        <li>缩容到 desiredSchedulable 为止</li>
+      </ul></div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ ALLOCATOR ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Allocator</div>
+  <div class="section-header">
+    <h2>💾 分配器 — 双层状态 + 三阶段事务</h2>
+    <p>内存快 + 注解持久 = 高性能 + Crash 可恢复</p>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-header"><div class="card-icon orange">🧠</div><div><div class="card-title">内存层</div><div class="card-sub">InMemoryAllocationStore</div></div></div>
+      <div class="card-body"><ul>
+        <li><strong>数据结构</strong>: <code>map[ns/poolName] → poolEntry</code></li>
+        <li><strong>poolEntry</strong>: per-Pool <code>sync.RWMutex</code> + <code>map[podName]sandboxName</code></li>
+        <li><strong>细粒度锁</strong>: 每 Pool 独立锁，不同 Pool 并发无竞争</li>
+        <li><strong>sync.Map</strong>: 管理 pools 索引，高并发读</li>
+        <li><strong>Double-Check Locking</strong>: getOrCreatePool() 中避免重复创建</li>
+      </ul></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-icon blue">📝</div><div><div class="card-title">注解层</div><div class="card-sub">AnnoAllocationSyncer</div></div></div>
+      <div class="card-body"><ul>
+        <li><strong>alloc-status</strong>: <code>{"pods":["p1","p2"]}</code> — 当前分配</li>
+        <li><strong>alloc-release</strong>: <code>{"pods":["p1"]}</code> — 正在回收中</li>
+        <li><strong>alloc-released</strong>: <code>{"pods":["p1"]}</code> — 已回收完成</li>
+        <li><strong>Finalizer</strong>: <code>pool-allocation</code> — 防 Sandbox 在有分配时被删</li>
+        <li>注解存在 BatchSandbox 上，不依赖外部存储</li>
+      </ul></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-icon green">🔄</div><div><div class="card-title">Recover 恢复</div><div class="card-sub">sync.Once · 失败即退出</div></div></div>
+      <div class="card-body"><ul>
+        <li><strong>时机</strong>: Controller 首次 Schedule() 触发</li>
+        <li><strong>流程</strong>: List 所有 BatchSandbox → 解析 alloc-status → 扣除 alloc-released → 重建内存</li>
+        <li><strong>一致性</strong>: 恢复失败直接 <code>os.Exit(1)</code> — 宁不可用也勿脏数据</li>
+        <li><strong>孤儿 GC</strong>: 恢复后 force-delete 的 Sandbox Pod 自动走回收路径</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <div class="card-header"><div class="card-icon pink">🔐</div><div><div class="card-title">三阶段分配事务</div><div class="card-sub">保证内存与注解的一致性</div></div></div>
+    <div class="card-body">
+      <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+      <table class="info-table">
+        <thead><tr><th style="width:120px;">操作</th><th>Phase 1</th><th>Phase 2</th><th>失败处理</th></tr></thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--accent2);font-weight:700;">分配 Allocate</td>
+            <td><strong>内存.更新</strong> (乐观)</td>
+            <td><strong>注解.持久化</strong> (MergePatch + Finalizer)</td>
+            <td>注解失败 → <strong>回滚内存</strong> 到旧状态</td>
+          </tr>
+          <tr>
+            <td style="color:var(--green);font-weight:700;">释放 Release</td>
+            <td><strong>注解.持久化</strong> (alloc-released)</td>
+            <td><strong>内存.释放</strong> (delete from map)</td>
+            <td>先持久化再释放 → Pod 不会被重复分配</td>
+          </tr>
+          <tr>
+            <td style="color:var(--blue);font-weight:700;">回收 Recycle</td>
+            <td><strong>注解.标记</strong> (alloc-release)</td>
+            <td><strong>回收 handler 执行</strong> → 成功 → alloc-released</td>
+            <td>完成后才持久化 released → 释放内存</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ RECYCLE ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Release & Recycle</div>
+  <div class="section-header">
+    <h2>♻️ Pod 释放与回收</h2>
+    <p>三态流转：alloc-status → alloc-release → alloc-released</p>
+  </div>
+
+  <div class="vflow">
+    <div class="vflow-step">
+      <div class="vflow-dot green"></div>
+      <div class="vflow-content">
+        <span class="phase green">Phase 1 — BatchSandbox 请求释放</span>
+        <h4>releasePods() → patch alloc-release annotation</h4>
+        <p>Task 完成 (Release 策略) / 缩容 / 删除 Sandbox → 将目标 Pod 写入 <code>alloc-release: {"pods":["p1"]}</code></p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot"></div>
+      <div class="vflow-content">
+        <span class="phase">Phase 2 — Pool Controller Watch 触发</span>
+        <h4>检测 alloc-release 变更 → doRecycle()</h4>
+        <p>Watch Predicate: 仅当 alloc-release annotation 变化时触发 Pool reconcile</p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot blue"></div>
+      <div class="vflow-content">
+        <span class="phase blue">Phase 3 — Recycle Handler 执行</span>
+        <h4>三种回收策略</h4>
+        <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:160px;background:var(--surface2);border-radius:8px;padding:14px;text-align:center;">
+            <div style="font-size:20px;margin-bottom:4px;">🗑️</div>
+            <div style="font-weight:700;font-size:14px;">Delete</div>
+            <div style="font-size:11px;color:var(--text2);">删除 Pod，Pool 按需重建</div>
+            <div style="margin-top:6px;"><span class="tag ok">默认</span></div>
+          </div>
+          <div style="flex:1;min-width:160px;background:var(--surface2);border-radius:8px;padding:14px;text-align:center;">
+            <div style="font-size:20px;margin-bottom:4px;">🔄</div>
+            <div style="font-weight:700;font-size:14px;">Restart</div>
+            <div style="font-size:11px;color:var(--text2);">kubectl exec 重启容器</div>
+            <div style="margin-top:6px;"><span class="tag warn">复用 Pod</span></div>
+          </div>
+          <div style="flex:1;min-width:160px;background:var(--surface2);border-radius:8px;padding:14px;text-align:center;">
+            <div style="font-size:20px;margin-bottom:4px;">⏭️</div>
+            <div style="font-weight:700;font-size:14px;">Noop</div>
+            <div style="font-size:11px;color:var(--text2);">什么都不做</div>
+            <div style="margin-top:6px;"><span class="tag warn">零开销</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot pink"></div>
+      <div class="vflow-content">
+        <span class="phase pink">Phase 4 — 持久化完成</span>
+        <h4>doRelease() → alloc-released annotation → 内存释放</h4>
+        <p>回收 handler 成功后: ① 持久化 <code>alloc-released</code> 注解 ② 内存 <code>ReleaseAllocation(p1)</code> ③ 释放完成</p>
+        <div class="note">💡 <strong>Finalizer 保护</strong>: 删除 Sandbox 时必须所有 Pod 都 released 后才能移除 finalizer → 防止 Pod 泄漏</div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ POOL ASSIGN ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Auto-Assign</div>
+  <div class="section-header">
+    <h2>🎯 自动选池 — Predicate + Scorer 链</h2>
+    <p>当 BatchSandbox 有 template 但无 poolRef 时，自动匹配最优 Pool</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><div class="card-icon orange">🔍</div><div><div class="card-title">Predicate 过滤链</div><div class="card-sub">全部通过才入候选</div></div></div>
+      <div class="card-body">
+        <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+        <table class="info-table">
+          <thead><tr><th style="width:130px;">Predicate</th><th>匹配逻辑</th></tr></thead>
+          <tbody>
+            <tr><td><strong>🔢 Capacity</strong></td><td><code>PoolMax - Allocated ≥ replicas</code> — 剩余容量检查</td></tr>
+            <tr><td><strong>🐳 Image</strong></td><td>Pool 任一容器镜像 ∈ Sandbox 镜像集合 — 交集匹配</td></tr>
+            <tr><td><strong>🏷️ LabelSelector</strong></td><td>Sandbox Label 值与 Pool Label 值相等 (可配 keys)</td></tr>
+            <tr><td><strong>📍 NodeSelector</strong></td><td>Sandbox nodeSelector/nodeAffinity ⊆ Pool 节点标签</td></tr>
+            <tr><td><strong>📊 Resource</strong></td><td>Pool 模板 resource requests ≥ Sandbox 需求 (每资源比较)</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-icon green">⭐</div><div><div class="card-title">Scorer 打分器</div><div class="card-sub">候选池中选最优</div></div></div>
+      <div class="card-body">
+        <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+        <table class="info-table">
+          <thead><tr><th style="width:130px;">Scorer</th><th>策略</th><th>公式</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>⚖️ ResBalance</strong></td>
+              <td><code>LeastAllocated</code> (默认)</td>
+              <td><code>1 - allocated/total</code> — 选最空闲的池</td>
+            </tr>
+            <tr>
+              <td><strong>⚖️ ResBalance</strong></td>
+              <td><code>MostAllocated</code></td>
+              <td><code>allocated/total</code> — 装箱策略，选最满的池</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+        <div class="note" style="margin-top:12px;">
+          💡 <strong>选池示例</strong>: 3 个 Pool 镜像都匹配 · A 负载 80% · B 负载 60% · C 负载 17% → LeastAllocated 选 C (score=0.83)
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ WATCH ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Event-Driven</div>
+  <div class="section-header">
+    <h2>👁️ 双层 Watch 事件驱动</h2>
+    <p>Pool Controller 通过精密的 Watch 链感知所有相关变化</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><div class="card-icon blue">📡</div><div><div class="card-title">Primary Watches</div></div></div>
+      <div class="card-body">
+        <div class="watch-chain">
+          <div class="watch-item">
+            <span class="watch-tag event">Event</span>
+            <div><strong>For(Pool)</strong><br><span style="font-size:12px;color:var(--text2);">Pool spec 变更 (GenerationChangedPredicate)</span></div>
+          </div>
+          <div class="watch-item">
+            <span class="watch-tag event">Event</span>
+            <div><strong>Owns(Pod)</strong><br><span style="font-size:12px;color:var(--text2);">Pool 创建的 Pod 状态变化</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-icon orange">🎯</div><div><div class="card-title">BatchSandbox Watches</div></div></div>
+      <div class="card-body">
+        <div class="watch-chain">
+          <div class="watch-item">
+            <span class="watch-tag event">Event</span>
+            <span class="watch-tag filter">Filter: poolRef!=""</span>
+            <div><strong>Watches(BatchSandbox)</strong><br><span style="font-size:12px;color:var(--text2);">alloc-release 变更 · replicas 变更 · DeletionTimestamp 设置</span></div>
+          </div>
+          <div class="watch-item">
+            <span class="watch-tag event">Event</span>
+            <span class="watch-tag filter">Filter: poolRef 变为空</span>
+            <div><strong>Watches(BatchSandbox, Detach)</strong><br><span style="font-size:12px;color:var(--text2);">Sandbox 脱离 Pool → enqueue 旧 Pool reconcile 清理</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ PACKED SCHEDULE ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Algorithm</div>
+  <div class="section-header">
+    <h2>🧮 PackedSchedule 贪心算法</h2>
+    <p>默认调度算法 — 按 Sandbox 顺序依次满足，先到先得</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><div class="card-icon orange">⚡</div><div><div class="card-title">算法伪代码</div></div></div>
+      <div class="card-body">
+        <div class="code-block">
+          <pre><span class="kw">func</span> <span class="fn">PackedSchedule</span>(availablePods, allRequest) AllocAction:
+    action = {ToAllocate:{}, ToRelease:{}, PodSupplement:0}
+
+    <span class="kw">for each</span> req <span class="kw">in</span> allRequest:
+        <span class="cmt">// 1. 记录释放</span>
+        <span class="kw">if</span> len(req.ToRelease) > 0:
+            action.ToRelease[name] = req.ToRelease
+
+        <span class="cmt">// 2. 计算分配</span>
+        need = req.PodSupplement
+        <span class="kw">if</span> need <= 0: <span class="kw">continue</span>
+
+        <span class="kw">if</span> len(available) >= need:
+            action.ToAllocate[name] = available[:need]
+            available = available[need:]          <span class="cmt">// 切下分配</span>
+        <span class="kw">elif</span> len(available) > 0:
+            action.ToAllocate[name] = available
+            action.PodSupplement += need - len(available)
+            available = nil                       <span class="cmt">// 用尽</span>
+        <span class="kw">else</span>:
+            action.PodSupplement += need            <span class="cmt">// 完全缺额</span>
+
+    <span class="kw">return</span> action</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-icon green">📋</div><div><div class="card-title">SandboxRequest 计算</div></div></div>
+      <div class="card-body">
+        <div class="equation" style="text-align:left;">
+          <span class="cmt">// 正常 Sandbox</span><br>
+          allocated = <span class="hl">GetSandboxAllocation(sandbox)</span><br>
+          released = <span class="hl">GetSandboxReleased(sandbox)</span><br>
+          releaseReq = <span class="hl">alloc-release annotation</span><br>
+          supplement = <span class="hl">replicas - len(allocated)</span><br>
+          toRelease = <span class="hl">releaseReq - released (未完成的释放)</span><br><br>
+          <span class="cmt">// 终止中的 Sandbox</span><br>
+          supplement = <span class="hl">0</span>  <span class="cmt">(不分配新 Pod)</span><br>
+          toRelease = <span class="hl">allocated - released (全部释放)</span><br><br>
+          <span class="cmt">// 孤儿 Sandbox (force-deleted)</span><br>
+          supplement = <span class="hl">0</span><br>
+          toRelease = <span class="hl">已分配但 Sandbox 不在列表中的 Pod (GC)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ KEY DETAILS ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Design Highlights</div>
+  <div class="section-header">
+    <h2>✨ 关键设计决策</h2>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-header"><div class="card-icon orange">🏗️</div><div><div class="card-title">Annotation 驱动协作</div></div></div>
+      <div class="card-body"><p style="font-size:13px;color:var(--text2);">BatchSandbox 和 Pool 两个 Controller 不直接通信 — 通过 CRD 注解实现松耦合协同。Watch Predicate 精确过滤必要事件。</p></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-icon green">🔄</div><div><div class="card-title">sync.Once 恢复</div></div></div>
+      <div class="card-body"><p style="font-size:13px;color:var(--text2);">Controller 重启时首次调度触发 Recover()，从注解重建内存态。失败直接 os.Exit(1) — 宁可不可用也不使用脏状态。</p></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-icon blue">📉</div><div><div class="card-title">滞回 (Hysteresis)</div></div></div>
+      <div class="card-body"><p style="font-size:13px;color:var(--text2);">buffer 超出 [min,max] 时不纠正到边界，而是回到中点。避免边界附近的反复扩缩容震荡。</p></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-icon pink">🔒</div><div><div class="card-title">Finalizer 安全网</div></div></div>
+      <div class="card-body"><p style="font-size:13px;color:var(--text2);">pool-allocation finalizer 阻止在有未释放 Pod 时删除 Sandbox。所有 Pod released 后才移除 finalizer。</p></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-icon purple">🧹</div><div><div class="card-title">孤儿 Pod GC</div></div></div>
+      <div class="card-body"><p style="font-size:13px;color:var(--text2);">force-delete BatchSandbox 后，Allocator 自动检测缺失 Sandbox 的已分配 Pod，构造孤儿请求走正常回收路径。</p></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-icon cyan">🎛️</div><div><div class="card-title">可插拔算法</div></div></div>
+      <div class="card-body"><p style="font-size:13px;color:var(--text2);">Algorithm 接口支持 Packed / Spread 切换。Profile 机制支持自定义 Predicate + Scorer 组合。回收 Handler 支持 Delete/Restart/Noop。</p></div>
+    </div>
+  </div>
+</div></div>
+
+<footer class="footer">
+  <p>OpenSandbox — <a href="https://github.com/alibaba/OpenSandbox" target="_blank">github.com/alibaba/OpenSandbox</a></p>
+  <p style="margin-top:8px;">Pool Pre-Warming · 亚秒级沙箱分配 · 自动温度控制</p>
+</footer>
+
+</body>
+</html>

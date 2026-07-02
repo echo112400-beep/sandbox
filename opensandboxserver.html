@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenSandbox Server — 架构分析</title>
+<style>
+  :root {
+    --bg: #07070d;
+    --surface: #111118;
+    --surface2: #181825;
+    --border: #252540;
+    --text: #e8e8f4;
+    --text2: #8e8eb8;
+    --accent: #a78bfa;
+    --accent2: #c4b5fd;
+    --green: #00e0a0;
+    --blue: #5ea0ff;
+    --orange: #ffa050;
+    --pink: #ff6b8a;
+    --red: #f06070;
+    --yellow: #fed040;
+    --cyan: #00d8d8;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow: 0 12px 48px rgba(0,0,0,0.35);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.7; overflow-x: hidden;
+  }
+
+  .hero {
+    position:relative; padding:100px 24px 80px; text-align:center; overflow:hidden;
+    border-bottom:1px solid var(--border);
+  }
+  .hero::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(167,139,250,0.22), transparent 70%),
+                radial-gradient(ellipse 50% 45% at 25% 85%, rgba(0,224,160,0.10), transparent 60%),
+                radial-gradient(ellipse 40% 35% at 80% 75%, rgba(94,160,255,0.10), transparent 60%);
+  }
+  .hero-content { position:relative; z-index:1; max-width:800px; margin:0 auto; }
+  .hero-badge {
+    display:inline-flex; align-items:center; gap:8px; padding:6px 16px;
+    border-radius:99px; font-size:13px; font-weight:600;
+    background:rgba(167,139,250,0.14); color:var(--accent2);
+    border:1px solid rgba(167,139,250,0.3); margin-bottom:20px;
+  }
+  .hero h1 { font-size:clamp(32px,5vw,56px); font-weight:800; letter-spacing:-1.5px; margin-bottom:12px; }
+  .hero h1 span { background:linear-gradient(135deg,var(--accent),var(--green),var(--blue)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .hero p { font-size:17px; color:var(--text2); max-width:580px; margin:0 auto 24px; }
+  .hero-stats { display:flex; justify-content:center; gap:40px; flex-wrap:wrap; }
+  .hero-stat { text-align:center; }
+  .hero-stat .num { font-size:28px; font-weight:800; color:var(--accent2); }
+  .hero-stat .lbl { font-size:12px; color:var(--text2); margin-top:2px; }
+
+  .container { max-width:1100px; margin:0 auto; padding:0 24px; }
+  .section { padding:64px 0; }
+  .section-label {
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+    text-transform:uppercase; letter-spacing:1px; color:var(--accent2); margin-bottom:8px;
+  }
+  .section-label::before { content:''; width:4px; height:4px; border-radius:50%; background:var(--accent); }
+  .section-header { margin-bottom:40px; }
+  .section-header h2 { font-size:26px; font-weight:700; margin-bottom:6px; }
+  .section-header p { color:var(--text2); font-size:14px; }
+
+  .grid-2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:20px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px; }
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; transition:all .25s;
+  }
+  .card:hover { border-color:rgba(167,139,250,0.4); transform:translateY(-2px); box-shadow:var(--shadow); }
+  .card-header { padding:20px 24px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--border); }
+  .card-icon { width:40px; height:40px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .card-icon.purple { background:rgba(167,139,250,0.15); color:var(--accent2); }
+  .card-icon.green { background:rgba(0,224,160,0.15); color:var(--green); }
+  .card-icon.blue { background:rgba(94,160,255,0.15); color:var(--blue); }
+  .card-icon.orange { background:rgba(255,160,80,0.15); color:var(--orange); }
+  .card-icon.pink { background:rgba(255,107,138,0.15); color:var(--pink); }
+  .card-icon.cyan { background:rgba(0,216,216,0.15); color:var(--cyan); }
+  .card-title { font-size:15px; font-weight:700; }
+  .card-sub { font-size:12px; color:var(--text2); }
+  .card-body { padding:16px 24px 20px; }
+  .card-body ul { list-style:none; display:flex; flex-direction:column; gap:6px; }
+  .card-body li { position:relative; padding-left:18px; font-size:13px; color:var(--text2); }
+  .card-body li::before { content:''; position:absolute; left:0; top:7px; width:5px; height:5px; border-radius:50%; background:var(--accent); opacity:.5; }
+  .card-body li strong { color:var(--text); font-weight:600; }
+  .card-body p { font-size:13px; color:var(--text2); }
+
+  .table-wrap { overflow-x:auto; }
+  .info-table { width:100%; border-collapse:collapse; min-width:520px; }
+  .info-table th {
+    text-align:left; padding:10px 14px; font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.5px; color:var(--text2);
+    border-bottom:1px solid var(--border);
+  }
+  .info-table td { padding:10px 14px; font-size:13px; border-bottom:1px solid var(--border); }
+  .info-table tr:last-child td { border-bottom:none; }
+  .info-table tr:hover td { background:rgba(167,139,250,0.04); }
+  .info-table td:first-child { font-weight:600; color:var(--text); white-space:nowrap; }
+  .info-table code { background:rgba(167,139,250,0.1); color:var(--accent2); padding:2px 6px; border-radius:4px; font-size:12px; }
+
+  .code-block {
+    background:rgba(0,0,0,0.35); border:1px solid var(--border); border-radius:var(--radius-sm);
+    overflow-x:auto; position:relative;
+  }
+  .code-block pre { font-family:'SF Mono','Fira Code',monospace; font-size:12.5px; line-height:1.75; color:var(--text); padding:16px 20px; margin:0; }
+  .code-block .kw { color:var(--pink); }
+  .code-block .str { color:var(--green); }
+  .code-block .cmt { color:var(--text2); }
+  .code-block .fn { color:var(--blue); }
+  .code-block .cls { color:var(--accent2); }
+  .code-block .num { color:var(--orange); }
+
+  .note {
+    padding:12px 16px; border-radius:var(--radius-sm); margin:16px 0; font-size:13px;
+    border-left:3px solid;
+  }
+  .note.info { background:rgba(94,160,255,0.06); border-color:var(--blue); color:var(--text2); }
+  .note.tip { background:rgba(0,224,160,0.06); border-color:var(--green); color:var(--text2); }
+  .note strong { color:var(--text); }
+
+  .tag-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .tag { display:inline-flex; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:700; }
+  .tag.ok { background:rgba(0,224,160,0.12); color:var(--green); }
+  .tag.info { background:rgba(94,160,255,0.12); color:var(--blue); }
+
+  .flow-h {
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:center;
+    margin:20px 0;
+  }
+  .flow-box {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:14px 20px; text-align:center; min-width:140px; transition:all .2s;
+  }
+  .flow-box:hover { border-color:var(--accent); }
+  .flow-box b { display:block; font-size:14px; margin-bottom:4px; }
+  .flow-box span { font-size:11px; color:var(--text2); }
+  .flow-arr { color:var(--text2); font-size:18px; flex-shrink:0; }
+
+  .dep-tree {
+    font-family:'SF Mono','Fira Code',monospace; font-size:12.5px; line-height:1.85;
+    color:var(--text); background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:20px 24px; overflow-x:auto;
+    white-space:pre;
+  }
+  .dep-tree .d { color:var(--text2); }
+  .dep-tree .b { color:var(--accent2); }
+  .dep-tree .r { color:var(--blue); }
+
+  .layers {
+    display:flex; flex-direction:column; gap:0; max-width:700px; margin:0 auto;
+  }
+  .layer {
+    border:1px solid var(--border); padding:20px 24px; position:relative;
+  }
+  .layer:first-child { border-radius:var(--radius) var(--radius) 0 0; background:rgba(167,139,250,0.06); }
+  .layer:nth-child(2) { background:rgba(94,160,255,0.04); }
+  .layer:nth-child(3) { background:rgba(0,224,160,0.04); }
+  .layer:last-child { border-radius:0 0 var(--radius) var(--radius); background:rgba(255,160,80,0.04); }
+  .layer h4 { font-size:14px; margin-bottom:4px; }
+  .layer p { font-size:12px; color:var(--text2); }
+  .layer .tag-row .tag { font-size:10px; }
+
+  .nav {
+    position:sticky; top:0; z-index:100;
+    background:rgba(7,7,13,0.85); backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--border); padding:0 24px;
+  }
+  .nav-inner { max-width:1100px; margin:0 auto; display:flex; align-items:center; height:52px; gap:20px; }
+  .nav-logo { font-weight:800; font-size:17px; letter-spacing:-.5px; white-space:nowrap; }
+  .nav-logo span { background:linear-gradient(135deg,var(--accent),var(--green)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .nav-links { display:flex; gap:2px; overflow-x:auto; flex:1; }
+  .nav-links::-webkit-scrollbar { display:none; }
+  .nav-links a { font-size:12px; font-weight:600; color:var(--text2); text-decoration:none; padding:6px 12px; border-radius:6px; white-space:nowrap; transition:all .2s; }
+  .nav-links a:hover { color:var(--text); background:var(--surface2); }
+
+  @media (max-width:768px) {
+    .grid-2,.grid-3 { grid-template-columns:1fr; }
+    .flow-h { flex-direction:column; }
+    .flow-arr { transform:rotate(90deg); }
+    .hero { padding:60px 16px 48px; }
+  }
+  .footer {
+    text-align:center; padding:48px 24px; color:var(--text2); font-size:13px;
+    border-top:1px solid var(--border); margin-top:40px;
+  }
+  .footer a { color:var(--accent2); text-decoration:none; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">Open<span>Sandbox</span></div>
+    <div class="nav-links">
+      <a href="#overview">概览</a><a href="#layers">分层架构</a><a href="#startup">启动流程</a>
+      <a href="#config">配置</a><a href="#api">API 路由</a><a href="#middleware">中间件</a>
+      <a href="#services">服务层</a><a href="#docker">Docker</a><a href="#k8s">Kubernetes</a>
+      <a href="#proxy">代理</a><a href="#snapshot">快照</a><a href="#patterns">设计模式</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">🐍 Python 3.10+ · FastAPI · Pydantic</div>
+    <h1>OpenSandbox <span>Server</span></h1>
+    <p>生命周期控制面 — FastAPI 沙箱编排服务。Docker 与 Kubernetes 双后端统一抽象，HTTP/WebSocket 透明代理，快照持久化，可插拔安全运行时。</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">4</div><div class="lbl">架构层</div></div>
+      <div class="hero-stat"><div class="num">2</div><div class="lbl">运行时后端</div></div>
+      <div class="hero-stat"><div class="num">8</div><div class="lbl">设计模式</div></div>
+      <div class="hero-stat"><div class="num">~117K</div><div class="lbl">LOC (服务层)</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ OVERVIEW ═══════ -->
+<div class="container" id="overview">
+<div class="section">
+<div class="section-label">Overview</div>
+<div class="section-header"><h2>🏗️ 系统定位</h2><p>OpenSandbox Server 是沙箱平台的控制面，负责接收客户端请求，编排底层容器运行时完成沙箱生命周期管理。</p></div>
+
+<div class="flow-h">
+  <div class="flow-box"><b>🐍 CLI</b><span>osb 命令</span></div><div class="flow-arr">→</div>
+  <div class="flow-box"><b>📦 SDKs</b><span>5 语言</span></div><div class="flow-arr">→</div>
+  <div class="flow-box" style="border-color:var(--accent);box-shadow:0 0 20px rgba(167,139,250,0.15);"><b>🖥️ Server</b><span>FastAPI · :80</span></div><div class="flow-arr">→</div>
+  <div class="flow-box"><b>🐳 Docker</b><span>本地开发</span></div>
+  <div class="flow-box"><b>☸️ Kubernetes</b><span>生产环境</span></div>
+</div>
+</div></div>
+
+<!-- ═══════ LAYERS ═══════ -->
+<div class="container" id="layers">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Layered Architecture</div>
+<div class="section-header"><h2>📐 四层架构</h2><p>严格分层，单向依赖</p></div>
+<div class="layers">
+  <div class="layer">
+    <h4>🎨 表现层 · Presentation</h4>
+    <p>api/ — HTTP 路由 + middleware/ — 认证 / 请求追踪</p>
+    <div class="tag-row"><span class="tag ok">lifecycle.py</span><span class="tag ok">proxy.py</span><span class="tag ok">pool.py</span><span class="tag ok">devops.py</span><span class="tag info">auth.py</span><span class="tag info">request_id.py</span></div>
+  </div>
+  <div class="layer">
+    <h4>⚙️ 服务层 · Service</h4>
+    <p>services/ — 抽象接口 + 运行时具体实现</p>
+    <div class="tag-row"><span class="tag ok">SandboxService (ABC)</span><span class="tag ok">DockerSandboxService</span><span class="tag ok">KubernetesSandboxService</span><span class="tag info">factory.py</span></div>
+  </div>
+  <div class="layer">
+    <h4>💾 仓库层 · Repository</h4>
+    <p>repositories/ — 持久化存储 (快照元数据)</p>
+    <div class="tag-row"><span class="tag ok">SQLiteSnapshotRepository</span><span class="tag info">Protocol 接口</span></div>
+  </div>
+  <div class="layer">
+    <h4>🔧 配置层 · Configuration</h4>
+    <p>config.py — Pydantic 模型树，TOML 解析，环境变量覆盖</p>
+    <div class="tag-row"><span class="tag ok">AppConfig</span><span class="tag ok">ServerConfig</span><span class="tag ok">RuntimeConfig</span><span class="tag info">跨字段校验</span></div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ STARTUP ═══════ -->
+<div class="container" id="startup">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Startup Sequence</div>
+<div class="section-header"><h2>🚀 启动流程</h2><p>main.py lifespan — 按顺序严格执行</p></div>
+
+<div class="flow-h">
+  <div class="flow-box"><b>① load_config</b><span>TOML 解析</span></div><div class="flow-arr">→</div>
+  <div class="flow-box"><b>② logging</b><span>结构化日志</span></div><div class="flow-arr">→</div>
+  <div class="flow-box"><b>③ lifespan 启动</b><span>8 个子步骤</span></div>
+</div>
+
+<div class="grid-2" style="margin-top:20px;">
+  <div class="card">
+    <div class="card-header"><div class="card-icon purple">🔧</div><div><div class="card-title">Lifespan 启动步骤</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>1.</strong> API Key 确认 — 首次运行人工交互</li>
+      <li><strong>2.</strong> anyio thread pool 调整 — server.thread_pool_size</li>
+      <li><strong>3.</strong> httpx.AsyncClient 创建 — 共享实例, timeout=180s</li>
+      <li><strong>4.</strong> 安全运行时校验 — gVisor/Kata/Firecracker 可用性</li>
+      <li><strong>5.</strong> Renew Intent Consumer — 可选 Redis 自动续期</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">📋</div><div><div class="card-title">中间件注册顺序 (逆序)</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>RequestIdMiddleware</strong> — 最外层 · X-Request-ID 全链路</li>
+      <li><strong>CORSMiddleware</strong> — 允许所有源</li>
+      <li><strong>AuthMiddleware</strong> — 最内层 · API Key 验证</li>
+      <li><em>路由注册顺序</em>: devops → pool → proxy → lifecycle</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="code-block" style="margin-top:16px;">
+  <span style="position:absolute;top:8px;right:12px;font-size:10px;font-weight:700;color:var(--text2);">Python — config.py</span>
+  <pre><span class="kw">class</span> <span class="cls">AppConfig</span>(BaseModel):
+    server:          <span class="cls">ServerConfig</span>          <span class="cmt"># host, port, api_key, thread_pool_size</span>
+    runtime:         <span class="cls">RuntimeConfig</span>         <span class="cmt"># type: "docker" | "kubernetes" + execd_image</span>
+    kubernetes:      <span class="cls">KubernetesRuntimeConfig</span> <span class="cmt"># namespace, workload_provider, QPS/burst</span>
+    docker:          <span class="cls">DockerConfig</span>          <span class="cmt"># network_mode, capabilities, seccomp, pids_limit</span>
+    ingress:         <span class="cls">IngressConfig</span>         <span class="cmt"># mode: direct|gateway + secure_access keys</span>
+    egress:          <span class="cls">EgressConfig</span>          <span class="cmt"># image, mode: dns|dns+nft</span>
+    storage:         <span class="cls">StorageConfig</span>         <span class="cmt"># host_path allowlist, volume defaults, OSSFS</span>
+    store:           <span class="cls">StoreConfig</span>           <span class="cmt"># type: "sqlite", path</span>
+    secure_runtime:  <span class="cls">SecureRuntimeConfig</span>   <span class="cmt"># type: gvisor|kata|firecracker + runtime mappings</span></pre>
+</div>
+</div></div>
+
+<!-- ═══════ CONFIG ═══════ -->
+<div class="container" id="config">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Configuration</div>
+<div class="section-header"><h2>⚙️ 配置模型</h2><p>Pydantic 完整校验 + 跨字段约束 + 环境变量覆盖</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon purple">📋</div><div><div class="card-title">配置加载链</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>1. 路径解析</strong> — 显式路径 → <code>SANDBOX_CONFIG_PATH</code> → <code>~/.sandbox.toml</code></li>
+      <li><strong>2. TOML 解析</strong> — tomllib / tomli</li>
+      <li><strong>3. Pydantic 校验</strong> — AppConfig 模型树</li>
+      <li><strong>4. 环境变量覆盖</strong> — <code>OPENSANDBOX_SERVER_API_KEY</code> 覆盖 TOML 值</li>
+      <li><strong>5. 跨字段验证</strong> — Docker 禁止 kubernetes block · Firecracker 仅 K8s</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">🔀</div><div><div class="card-title">关键切换: runtime.type</div></div></div>
+    <div class="card-body">
+      <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+      <table class="info-table">
+        <tr><td style="width:140px;"><code>"docker"</code></td><td>DockerSandboxService · ingress.mode 必须为 "direct"</td></tr>
+        <tr><td><code>"kubernetes"</code></td><td>KubernetesSandboxService · kubernetes block 必填</td></tr>
+      </table>
+      </div>
+      <div class="note tip" style="margin-top:12px;margin-bottom:0;"><strong>💡 安全运行时映射</strong>: gVisor→runsc/gvisor, Kata→kata-runtime/kata-qemu, Firecracker→K8s only kata-fc</div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ API ═══════ -->
+<div class="container" id="api">
+<div class="section" style="padding-top:0;">
+<div class="section-label">API Routes</div>
+<div class="section-header"><h2>🔗 API 路由全景</h2><p>4 个 Router，按路径前缀分工</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon purple">📦</div><div><div class="card-title">Lifecycle Router</div><div class="card-sub">/sandboxes · /snapshots</div></div></div>
+    <div class="card-body">
+      <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+      <table class="info-table">
+        <thead><tr><th>Method</th><th>Path</th><th>Handler</th></tr></thead>
+        <tbody>
+          <tr><td>POST</td><td>/sandboxes</td><td>create_sandbox</td></tr>
+          <tr><td>GET</td><td>/sandboxes</td><td>list_sandboxes (分页+过滤)</td></tr>
+          <tr><td>GET</td><td>/sandboxes/{id}</td><td>get_sandbox</td></tr>
+          <tr><td>DELETE</td><td>/sandboxes/{id}</td><td>delete_sandbox</td></tr>
+          <tr><td>PATCH</td><td>/sandboxes/{id}/metadata</td><td>RFC 7396 Merge Patch</td></tr>
+          <tr><td>POST</td><td>/sandboxes/{id}/pause</td><td>pause_sandbox</td></tr>
+          <tr><td>POST</td><td>/sandboxes/{id}/resume</td><td>resume_sandbox</td></tr>
+          <tr><td>POST</td><td>/sandboxes/{id}/renew-expiration</td><td>renew_sandbox_expiration</td></tr>
+          <tr><td>GET</td><td>/sandboxes/{id}/endpoints/{port}</td><td>get_sandbox_endpoint (含签名)</td></tr>
+          <tr><td>POST</td><td>/sandboxes/{id}/snapshots</td><td>create_snapshot</td></tr>
+          <tr><td>GET</td><td>/snapshots</td><td>list_snapshots</td></tr>
+          <tr><td>GET/DELETE</td><td>/snapshots/{id}</td><td>get/delete_snapshot</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">🔁</div><div><div class="card-title">Proxy + Pool + DevOps</div></div></div>
+    <div class="card-body">
+      <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+      <table class="info-table">
+        <thead><tr><th>Router</th><th>Path</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td rowspan="2"><strong>Proxy</strong></td><td>ANY /sandboxes/{id}/proxy/{port}/...</td><td>HTTP 反向代理 (httpx.stream)</td></tr>
+          <tr><td>GET /sandboxes/{id}/proxy/{port}/... ↑WebSocket</td><td>WS 双向 relay (anyio task_group)</td></tr>
+          <tr><td rowspan="2"><strong>Pool</strong></td><td>POST/GET /pools</td><td>K8s Pool CRD CRUD</td></tr>
+          <tr><td>GET/PUT/DELETE /pools/{name}</td><td>K8s Only · 非 K8s → 501</td></tr>
+          <tr><td rowspan="3"><strong>DevOps</strong></td><td>/sandboxes/{id}/diagnostics/logs</td><td>容器日志 (tail/since)</td></tr>
+          <tr><td>/sandboxes/{id}/diagnostics/inspect</td><td>容器 inspect</td></tr>
+          <tr><td>/sandboxes/{id}/diagnostics/summary</td><td>日志+inspect+事件聚合</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ MIDDLEWARE ═══════ -->
+<div class="container" id="middleware">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Middleware</div>
+<div class="section-header"><h2>🔒 中间件</h2></div>
+
+<div class="grid-3">
+  <div class="card">
+    <div class="card-header"><div class="card-icon pink">🔑</div><div><div class="card-title">AuthMiddleware</div></div></div>
+    <div class="card-body">
+      <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+      <table class="info-table">
+        <thead><tr><th>路径</th><th>行为</th></tr></thead>
+        <tbody>
+          <tr><td>/health, /docs, /redoc</td><td>豁免</td></tr>
+          <tr><td>/sandboxes/{id}/proxy/.../*</td><td>豁免 (最终用户无密钥)</td></tr>
+          <tr><td>其他所有</td><td>验证 <code>OPEN-SANDBOX-API-KEY</code></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p style="font-size:12px;color:var(--text2);margin-top:8px;">401 → <code>{"code":"MISSING_API_KEY"|"INVALID_API_KEY"}</code></p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">🏷️</div><div><div class="card-title">RequestIdMiddleware</div></div></div>
+    <div class="card-body"><ul>
+      <li>读取 <code>X-Request-ID</code> header 或生成 UUID4 hex</li>
+      <li>存入 <code>ContextVar</code> — 跨 async 边界传递</li>
+      <li>注入响应 header + logging filter</li>
+      <li>全链路日志带 request_id 标签</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">🌐</div><div><div class="card-title">CORSMiddleware</div></div></div>
+    <div class="card-body"><ul>
+      <li><code>allow_origins=["*"]</code> — 允许所有来源</li>
+      <li><code>allow_methods=["*"]</code></li>
+      <li><code>allow_headers=["*"]</code></li>
+    </ul></div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ SERVICES ═══════ -->
+<div class="container" id="services">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Service Layer</div>
+<div class="section-header"><h2>🧩 服务层 — 抽象接口 + 工厂</h2><p>SandboxService ABC 定义 12 个生命周期方法</p></div>
+
+<div class="code-block" style="margin-bottom:20px;">
+  <span style="position:absolute;top:8px;right:12px;font-size:10px;font-weight:700;color:var(--text2);">Python — sandbox_service.py</span>
+  <pre><span class="kw">class</span> <span class="cls">SandboxService</span>(ABC):
+    <span class="kw">async def</span> <span class="fn">create_sandbox</span>(request) → CreateSandboxResponse
+    <span class="kw">def</span> <span class="fn">list_sandboxes</span>(request) → ListSandboxResponses
+    <span class="kw">def</span> <span class="fn">get_sandbox</span>(id) → Sandbox
+    <span class="kw">async def</span> <span class="fn">delete_sandbox</span>(id)
+    <span class="kw">def</span> <span class="fn">pause_sandbox</span>(id) / <span class="fn">resume_sandbox</span>(id)
+    <span class="kw">def</span> <span class="fn">renew_expiration</span>(id, request)
+    <span class="kw">def</span> <span class="fn">patch_sandbox_metadata</span>(id, patch) → Sandbox
+    <span class="kw">def</span> <span class="fn">get_endpoint</span>(id, port, resolve_internal, expires) → Endpoint
+    <span class="kw">def</span> <span class="fn">get_sandbox_logs</span>(id, tail, since) → str</pre>
+</div>
+
+<div class="flow-h">
+  <div class="flow-box"><b>factory.py</b><span>create_sandbox_service()</span></div>
+  <div class="flow-arr">→</div>
+  <div class="flow-box" style="border-color:var(--accent);"><b>runtime.type == "docker"</b><span>DockerSandboxService</span></div>
+  <div class="flow-box" style="border-color:var(--accent);"><b>runtime.type == "kubernetes"</b><span>KubernetesSandboxService</span></div>
+</div>
+</div></div>
+
+<!-- ═══════ DOCKER ═══════ -->
+<div class="container" id="docker">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Docker Implementation</div>
+<div class="section-header"><h2>🐳 Docker 实现 — Mixin 组合</h2><p>6 个 Mixin + 抽象接口，通过多重继承组装</p></div>
+
+<div class="code-block" style="margin-bottom:16px;">
+  <span style="position:absolute;top:8px;right:12px;font-size:10px;font-weight:700;color:var(--text2);">Python</span>
+  <pre><span class="kw">class</span> <span class="cls">DockerSandboxService</span>(
+    <span class="cls">DockerDiagnosticsMixin</span>,    <span class="cmt"># logs / inspect / events</span>
+    <span class="cls">DockerRuntimeMixin</span>,        <span class="cmt"># 容器生命周期 (CRUD + pause/resume)</span>
+    <span class="cls">DockerVolumesMixin</span>,        <span class="cmt"># 卷管理 (host / PVC / OSSFS)</span>
+    <span class="cls">DockerNetworkingMixin</span>,     <span class="cmt"># egress sidecar 注入</span>
+    <span class="cls">DockerContainerOpsMixin</span>,   <span class="cmt"># 底层容器操作</span>
+    <span class="cls">OSSFSMixin</span>,                <span class="cmt"># 阿里云 OSSFS 挂载</span>
+    <span class="cls">SandboxService</span>,            <span class="cmt"># ABC 接口</span>
+    <span class="cls">ExtensionService</span>           <span class="cmt"># 扩展元数据</span>
+):</pre>
+</div>
+
+<div class="grid-3">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">📦</div><div><div class="card-title">container_ops.py</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>create/start/stop/remove</strong> — 容器生命周期</li>
+      <li><strong>镜像拉取</strong> — 含私有仓库认证</li>
+      <li><strong>execd 注入</strong> — 将 execd 二进制注入容器</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">🌐</div><div><div class="card-title">networking.py</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>egress sidecar</strong> — 自动注入到容器网络命名空间</li>
+      <li><strong>bridge/host 模式</strong> — 网络拓扑管理</li>
+      <li><strong>credential proxy</strong> — 凭证注入代理</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon orange">💾</div><div><div class="card-title">volumes.py</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>host bind mount</strong> — allowlist 校验</li>
+      <li><strong>named volume</strong> — Docker volume CRUD</li>
+      <li><strong>OSSFS</strong> — 阿里云对象存储 FUSE</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon purple">📝</div><div><div class="card-title">metadata.py</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>DockerMetadataStore</strong> — 内存缓存</li>
+      <li><strong>容器标签</strong> — 持久化源 (<code>opensandbox.io/</code>)</li>
+      <li>双层: 标签=source of truth, 内存=快速查询</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon pink">🔌</div><div><div class="card-title">port_allocator.py</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>动态端口分配</strong> — bridge 模式</li>
+      <li>避免端口冲突</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon cyan">📸</div><div><div class="card-title">snapshot_runtime.py</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>Docker commit</strong> — 容器→镜像</li>
+      <li>标记 + 可选推送</li>
+    </ul></div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ K8S ═══════ -->
+<div class="container" id="k8s">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Kubernetes Implementation</div>
+<div class="section-header"><h2>☸️ Kubernetes 实现 — 委托模式</h2><p>WorkloadProvider 抽象 + BatchSandbox/AgentSandbox 双实现</p></div>
+
+<div class="code-block" style="margin-bottom:16px;">
+  <span style="position:absolute;top:8px;right:12px;font-size:10px;font-weight:700;color:var(--text2);">Python</span>
+  <pre><span class="kw">class</span> <span class="cls">KubernetesSandboxService</span>(K8sDiagnosticsMixin, SandboxService, ExtensionService):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, config):
+        self.k8s_client = <span class="cls">K8sClient</span>(config.kubernetes)
+        self.workload_provider = <span class="fn">create_workload_provider</span>(...)  <span class="cmt"># 工厂</span>
+
+<span class="cmt"># WorkloadProvider 抽象接口</span>
+<span class="kw">class</span> <span class="cls">WorkloadProvider</span>(ABC):
+    <span class="fn">create_workload</span>()  <span class="fn">get_workload</span>()   <span class="fn">delete_workload</span>()
+    <span class="fn">update_expiration</span>()  <span class="fn">get_endpoint_info</span>()  <span class="fn">supports_pool</span>()
+
+<span class="cmt"># 两个实现</span>
+<span class="cls">BatchSandboxProvider</span>   → CRD: batchsandboxes.sandbox.opensandbox.io
+<span class="cls">AgentSandboxProvider</span>   → CRD: sandboxes (agent-sandbox)</pre>
+</div>
+
+<div class="grid-3">
+  <div class="card"><div class="card-header"><div class="card-icon blue">🔌</div><div><div class="card-title">client.py</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">K8sClient — 封装 kubernetes Python SDK · CoreV1Api + CustomObjectsApi · 类型安全方法</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon purple">🏗️</div><div><div class="card-title">create_helpers.py</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">组装创建参数 — execd init container · 主容器 spec · 平台约束 · 镜像拉取密钥</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon green">🗺️</div><div><div class="card-title">workload_mapper.py</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">K8s 资源对象 → Sandbox API 模型 · 标签/注解/状态统一映射</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon orange">📍</div><div><div class="card-title">endpoint_resolver.py</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">Pod IP + Port 端点解析 · Gateway URL 构造 · 签名路由令牌 (OSEP-0011)</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon pink">📸</div><div><div class="card-title">snapshot_runtime.py</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">CR 驱动的快照 · batchsandbox_provider._patch_pause_with_retry_bridge</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon cyan">📋</div><div><div class="card-title">template_manager.py</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">YAML 模板加载 + 缓存 · BatchSandboxTemplateManager</p></div></div>
+</div>
+</div></div>
+
+<!-- ═══════ PROXY ═══════ -->
+<div class="container" id="proxy">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Proxy Design</div>
+<div class="section-header"><h2>🔁 透明代理 — HTTP + WebSocket</h2><p>深入沙箱的流量隧道</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">🌐</div><div><div class="card-title">HTTP 代理流程</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>1.</strong> ProxyRenewCoordinator.schedule(id) — 自动续期</li>
+      <li><strong>2.</strong> sandbox_service.get_endpoint(id, port, resolve_internal=True)<br><span style="font-size:11px;color:var(--text2);">Docker→127.0.0.1:port · K8s→Pod ClusterIP</span></li>
+      <li><strong>3.</strong> 构建目标 URL: http://{host}:{port}/{path}</li>
+      <li><strong>4.</strong> 过滤 Headers:<br><span style="font-size:11px;color:var(--text2);">删除 connection, transfer-encoding, authorization, cookie</span><br><span style="font-size:11px;color:var(--text2);">重建 X-Forwarded-Proto, X-Forwarded-Host, X-Forwarded-For</span></li>
+      <li><strong>5.</strong> httpx.AsyncClient.stream() → 后端</li>
+      <li><strong>6.</strong> StreamingResponse(aiter_raw()) → 客户端 (避免解码)</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon purple">🔌</div><div><div class="card-title">WebSocket 代理流程</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>1.</strong> websockets.connect(backend_url)</li>
+      <li><strong>2.</strong> anyio task_group 双向 relay:<br><span style="font-size:11px;color:var(--text2);">_relay_client_messages() ← 客户端→后端</span><br><span style="font-size:11px;color:var(--text2);">_relay_backend_messages() ← 后端→客户端</span></li>
+      <li><strong>3.</strong> 任一端关闭 → 取消另一端 cancel scope</li>
+      <li><strong>4.</strong> max_size=None — 不限制消息大小</li>
+    </ul></div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ SNAPSHOT ═══════ -->
+<div class="container" id="snapshot">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Snapshot Subsystem</div>
+<div class="section-header"><h2>📸 快照子系统</h2><p>独立服务 + 仓库 + 运行时三层架构</p></div>
+
+<div class="flow-h">
+  <div class="flow-box"><b>SnapshotService</b><span>ABC</span></div><div class="flow-arr">→</div>
+  <div class="flow-box"><b>PersistedSnapshotService</b><span>实现</span></div><div class="flow-arr">→</div>
+  <div class="flow-box"><b>SQLiteRepository</b><span>持久化</span></div>
+  <div class="flow-box"><b>SnapshotRuntime</b><span>Docker/K8s</span></div>
+</div>
+
+<div class="grid-2" style="margin-top:20px;">
+  <div class="card">
+    <div class="card-header"><div class="card-icon purple">🔄</div><div><div class="card-title">快照创建流程</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>1.</strong> 校验源沙箱 Running</li>
+      <li><strong>2.</strong> 持久化 SnapshotRecord(state=CREATING) → SQLite</li>
+      <li><strong>3.</strong> ThreadPoolExecutor(max_workers=2) 提交后台 worker</li>
+      <li><strong>4.</strong> Worker: runtime.create_snapshot() (Docker commit / K8s CR)</li>
+      <li><strong>5.</strong> update_if_state(CREATING→READY) — 乐观锁</li>
+      <li><strong>6.</strong> 启动时 recover_unfinished_snapshots() 恢复未完成快照</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">💾</div><div><div class="card-title">SQLite Schema</div></div></div>
+    <div class="card-body"><div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+    <table class="info-table">
+      <thead><tr><th>列</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>id</td><td>快照 UUID</td></tr>
+        <tr><td>source_sandbox_id</td><td>源沙箱 ID</td></tr>
+        <tr><td>state</td><td>CREATING / READY / ERROR / DELETING</td></tr>
+        <tr><td>restore_config</td><td>JSON — 恢复快照所需配置</td></tr>
+        <tr><td>reason / message</td><td>错误原因 / 人类可读消息</td></tr>
+      </tbody>
+    </table>
+    </div></div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ PATTERNS ═══════ -->
+<div class="container" id="patterns">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Design Patterns</div>
+<div class="section-header"><h2>🎯 设计模式全景</h2><p>Server 代码中应用的 8 种核心模式</p></div>
+
+<div class="grid-3">
+  <div class="card"><div class="card-header"><div class="card-icon purple">🎭</div><div><div class="card-title">Strategy</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">SandboxService ABC → Docker/K8s · WorkloadProvider → BatchSandbox/AgentSandbox</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon blue">🏭</div><div><div class="card-title">Factory</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">create_sandbox_service() · create_workload_provider() · create_snapshot_repository()</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon green">📋</div><div><div class="card-title">Template Method</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">SandboxService._apply_metadata_patch() 共享逻辑 · 子类实现抽象方法</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon orange">🧩</div><div><div class="card-title">Mixin Composition</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">DockerSandboxService 6 mixins 多重继承 · K8s 用委托代替 mixin</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon pink">📜</div><div><div class="card-title">Protocol Repository</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">SnapshotRepository 是 Protocol (结构子类型, 非 ABC) · SQLite 实现</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon cyan">🔐</div><div><div class="card-title">Optimistic Concurrency</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">update_if_state(expected_state) · 仅当状态匹配时才转换 · 快照状态机</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon purple">🧵</div><div><div class="card-title">ContextVar Tracing</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">request_id_ctx 跨 async 边界传递 · 全链路 Request ID 追踪</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon blue">🔗</div><div><div class="card-title">Module Singleton</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">sandbox_service / snapshot_service 在 api/lifecycle.py 模块导入时创建</p></div></div>
+</div>
+</div></div>
+
+<!-- ═══════ DEPENDENCY FLOW ═══════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Dependency Flow</div>
+<div class="section-header"><h2>🌲 依赖树</h2></div>
+<div class="dep-tree"><span class="b">main.py</span> <span class="d">(lifespan)</span>
+  │
+  ├─ <span class="fn">load_config</span>() ────────────► <span class="b">config.py</span> <span class="d">(Pydantic 模型树)</span>
+  ├─ <span class="fn">configure_logging</span>() ────► <span class="b">logging_config.py</span>
+  ├─ <span class="fn">validate_secure_runtime</span>()► <span class="b">runtime_resolver.py</span>
+  │
+  └─ 路由注册:
+       <span class="b">api/lifecycle.py</span> <span class="d">(模块加载)</span>
+         ├─ <span class="fn">create_sandbox_service</span>() ─► <span class="b">factory.py</span>
+         │    ├─ <span class="r">"docker"</span> → <span class="cls">DockerSandboxService</span> <span class="d">(6 mixins)</span>
+         │    └─ <span class="r">"kubernetes"</span> → <span class="cls">KubernetesSandboxService</span>
+         │         ├─ <span class="cls">K8sClient</span> <span class="d">(client.py)</span>
+         │         └─ <span class="cls">WorkloadProvider</span> <span class="d">(BatchSandbox | AgentSandbox)</span>
+         │
+         └─ <span class="fn">create_snapshot_service</span>()
+              └─ <span class="cls">PersistedSnapshotService</span>
+                   ├─ <span class="cls">SQLiteSnapshotRepository</span>
+                   └─ <span class="cls">SnapshotRuntime</span> <span class="d">(Docker | K8s | Noop)</span>
+
+       <span class="b">api/proxy.py</span>
+         └─ sandbox_service.<span class="fn">get_endpoint</span>(resolve_internal=True)
+         └─ app.state.http_client <span class="d">(共享 httpx.AsyncClient)</span>
+
+       <span class="b">middleware/auth.py</span>
+         └─ config.server.api_key</div>
+</div></div>
+
+<footer class="footer">
+  <p>OpenSandbox — <a href="https://github.com/alibaba/OpenSandbox" target="_blank">github.com/alibaba/OpenSandbox</a></p>
+  <p style="margin-top:8px;">Server Architecture · Python 3.10+ · FastAPI · Pydantic · Docker + Kubernetes</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenSandbox — 多镜像 Pool 管理 & Warm Pool 使用指南</title>
+<style>
+  :root {
+    --bg: #07070d; --surface: #111118; --surface2: #181825; --border: #252540;
+    --text: #e8e8f4; --text2: #8e8eb8; --accent: #f0a030; --accent2: #ffc060;
+    --green: #00e0a0; --blue: #5ea0ff; --orange: #ffa050;
+    --pink: #ff6b8a; --red: #f06070; --yellow: #fed040; --purple: #a78bfa; --cyan: #00d8d8;
+    --radius: 14px; --radius-sm: 8px; --shadow: 0 12px 48px rgba(0,0,0,0.35);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif; background:var(--bg); color:var(--text); line-height:1.7; overflow-x:hidden; }
+
+  .hero {
+    position:relative; padding:100px 24px 80px; text-align:center; overflow:hidden; border-bottom:1px solid var(--border);
+  }
+  .hero::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(240,160,48,0.25), transparent 70%),
+                radial-gradient(ellipse 50% 45% at 25% 85%, rgba(0,224,160,0.10), transparent 60%),
+                radial-gradient(ellipse 40% 35% at 80% 75%, rgba(94,160,255,0.10), transparent 60%);
+  }
+  .hero-content { position:relative; z-index:1; max-width:800px; margin:0 auto; }
+  .hero-badge {
+    display:inline-flex; align-items:center; gap:8px; padding:6px 16px; border-radius:99px;
+    font-size:13px; font-weight:600; background:rgba(240,160,48,0.14); color:var(--accent2);
+    border:1px solid rgba(240,160,48,0.3); margin-bottom:20px;
+  }
+  .hero h1 { font-size:clamp(32px,5vw,56px); font-weight:800; letter-spacing:-1.5px; margin-bottom:12px; }
+  .hero h1 span { background:linear-gradient(135deg,var(--accent),var(--green),var(--blue)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .hero p { font-size:17px; color:var(--text2); max-width:600px; margin:0 auto 24px; }
+  .hero-stats { display:flex; justify-content:center; gap:40px; flex-wrap:wrap; }
+  .hero-stat { text-align:center; }
+  .hero-stat .num { font-size:28px; font-weight:800; color:var(--accent2); }
+  .hero-stat .lbl { font-size:12px; color:var(--text2); margin-top:2px; }
+
+  .container { max-width:1100px; margin:0 auto; padding:0 24px; }
+  .section { padding:64px 0; }
+  .section-label {
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+    text-transform:uppercase; letter-spacing:1px; color:var(--accent2); margin-bottom:8px;
+  }
+  .section-label::before { content:''; width:4px; height:4px; border-radius:50%; background:var(--accent); }
+  .section-header { margin-bottom:40px; }
+  .section-header h2 { font-size:26px; font-weight:700; margin-bottom:6px; }
+  .section-header p { color:var(--text2); font-size:14px; }
+
+  .grid-2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:20px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px; }
+
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; transition:all .25s;
+  }
+  .card:hover { border-color:rgba(240,160,48,0.4); transform:translateY(-2px); box-shadow:var(--shadow); }
+  .card-header { padding:20px 24px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--border); }
+  .card-icon { width:40px; height:40px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .card-icon.orange { background:rgba(240,160,48,0.15); color:var(--accent2); }
+  .card-icon.green { background:rgba(0,224,160,0.15); color:var(--green); }
+  .card-icon.blue { background:rgba(94,160,255,0.15); color:var(--blue); }
+  .card-icon.purple { background:rgba(167,139,250,0.15); color:var(--purple); }
+  .card-icon.pink { background:rgba(255,107,138,0.15); color:var(--pink); }
+  .card-icon.cyan { background:rgba(0,216,216,0.15); color:var(--cyan); }
+  .card-title { font-size:15px; font-weight:700; }
+  .card-sub { font-size:12px; color:var(--text2); }
+  .card-body { padding:16px 24px 20px; }
+  .card-body ul { list-style:none; display:flex; flex-direction:column; gap:6px; }
+  .card-body li { position:relative; padding-left:18px; font-size:13px; color:var(--text2); }
+  .card-body li::before { content:''; position:absolute; left:0; top:7px; width:5px; height:5px; border-radius:50%; background:var(--accent); opacity:.5; }
+  .card-body li strong { color:var(--text); font-weight:600; }
+  .card-body p { font-size:13px; color:var(--text2); }
+
+  .table-wrap { overflow-x:auto; }
+  .info-table { width:100%; border-collapse:collapse; min-width:500px; }
+  .info-table th { text-align:left; padding:10px 14px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text2); border-bottom:1px solid var(--border); }
+  .info-table td { padding:10px 14px; font-size:13px; border-bottom:1px solid var(--border); }
+  .info-table tr:last-child td { border-bottom:none; }
+  .info-table tr:hover td { background:rgba(240,160,48,0.04); }
+  .info-table td:first-child { font-weight:600; color:var(--text); white-space:nowrap; }
+  .info-table code { background:rgba(240,160,48,0.1); color:var(--accent2); padding:2px 6px; border-radius:4px; font-size:12px; }
+
+  .code-block {
+    background:rgba(0,0,0,0.35); border:1px solid var(--border); border-radius:var(--radius-sm);
+    overflow-x:auto; position:relative;
+  }
+  .code-block .lang-tag {
+    position:absolute; top:8px; right:12px; font-size:10px; font-weight:700; color:var(--text2);
+    text-transform:uppercase; letter-spacing:.5px;
+  }
+  .code-block pre { font-family:'SF Mono','Fira Code',monospace; font-size:12.5px; line-height:1.75; color:var(--text); padding:16px 20px; margin:0; }
+  .code-block .kw { color:var(--pink); }
+  .code-block .str { color:var(--green); }
+  .code-block .cmt { color:var(--text2); }
+  .code-block .fn { color:var(--blue); }
+  .code-block .cls { color:var(--accent2); }
+  .code-block .num { color:var(--orange); }
+
+  .note {
+    padding:12px 16px; border-radius:var(--radius-sm); margin:16px 0; font-size:13px; border-left:3px solid;
+  }
+  .note.info { background:rgba(94,160,255,0.06); border-color:var(--blue); color:var(--text2); }
+  .note.tip { background:rgba(0,224,160,0.06); border-color:var(--green); color:var(--text2); }
+  .note.warn { background:rgba(255,160,80,0.06); border-color:var(--orange); color:var(--text2); }
+  .note strong { color:var(--text); }
+
+  .tag { display:inline-flex; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:700; }
+  .tag.ok { background:rgba(0,224,160,0.12); color:var(--green); }
+  .tag.warn { background:rgba(255,160,80,0.12); color:var(--orange); }
+  .tag.info { background:rgba(94,160,255,0.12); color:var(--blue); }
+  .tag.purple { background:rgba(167,139,250,0.12); color:var(--purple); }
+
+  .step-list { counter-reset:step; display:flex; flex-direction:column; gap:16px; }
+  .step-item {
+    position:relative; padding-left:48px; min-height:36px;
+  }
+  .step-item::before {
+    counter-increment:step; content:counter(step);
+    position:absolute; left:0; top:0; width:28px; height:28px;
+    border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:800; background:rgba(240,160,48,0.15); color:var(--accent2);
+  }
+  .step-item h4 { font-size:14px; font-weight:700; margin-bottom:2px; }
+  .step-item p { font-size:13px; color:var(--text2); }
+  .step-item code { background:rgba(240,160,48,0.1); color:var(--accent2); padding:1px 6px; border-radius:4px; font-size:12px; }
+
+  .flow-h { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; margin:16px 0; }
+  .flow-box {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:12px 18px; text-align:center; min-width:120px; transition:all .2s;
+  }
+  .flow-box:hover { border-color:var(--accent); }
+  .flow-box b { display:block; font-size:13px; margin-bottom:2px; }
+  .flow-box span { font-size:10px; color:var(--text2); }
+  .flow-arr { color:var(--text2); font-size:16px; flex-shrink:0; }
+
+  .tabs { display:flex; gap:4px; margin-bottom:20px; flex-wrap:wrap; background:var(--surface2); padding:4px; border-radius:var(--radius-sm); }
+  .tab-btn {
+    padding:8px 16px; border-radius:6px; font-size:13px; font-weight:600; border:none; cursor:pointer;
+    background:transparent; color:var(--text2); transition:all .2s; font-family:inherit;
+  }
+  .tab-btn.active { background:var(--surface); color:var(--text); box-shadow:0 2px 8px rgba(0,0,0,0.2); }
+  .tab-btn:hover:not(.active) { color:var(--text); }
+
+  .nav {
+    position:sticky; top:0; z-index:100;
+    background:rgba(7,7,13,0.85); backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--border); padding:0 24px;
+  }
+  .nav-inner { max-width:1100px; margin:0 auto; display:flex; align-items:center; height:52px; gap:20px; }
+  .nav-logo { font-weight:800; font-size:17px; letter-spacing:-.5px; white-space:nowrap; }
+  .nav-logo span { background:linear-gradient(135deg,var(--accent),var(--green)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .nav-links { display:flex; gap:2px; overflow-x:auto; flex:1; }
+  .nav-links::-webkit-scrollbar { display:none; }
+  .nav-links a { font-size:12px; font-weight:600; color:var(--text2); text-decoration:none; padding:6px 10px; border-radius:6px; white-space:nowrap; transition:all .2s; }
+  .nav-links a:hover { color:var(--text); background:var(--surface2); }
+
+  @media (max-width:768px) {
+    .grid-2,.grid-3 { grid-template-columns:1fr; }
+    .flow-h { flex-direction:column; }
+    .flow-arr { transform:rotate(90deg); }
+    .hero { padding:60px 16px 48px; }
+  }
+  .footer { text-align:center; padding:48px 24px; color:var(--text2); font-size:13px; border-top:1px solid var(--border); margin-top:40px; }
+  .footer a { color:var(--accent2); text-decoration:none; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">Open<span>Sandbox</span></div>
+    <div class="nav-links">
+      <a href="#concept">核心概念</a><a href="#create-pool">创建多镜像池</a>
+      <a href="#use-warm">使用 Warm Pod</a><a href="#auto-assign">自动选池</a>
+      <a href="#sdk-best">SDK 最佳实践</a><a href="#manage">运维管理</a>
+      <a href="#trouble">故障排查</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">🔥 多镜像 Pool 管理 + Warm Pod 使用指南</div>
+    <h1>Pool<span> 实战</span>手册</h1>
+    <p>如何创建多个不同镜像的预热资源池，如何通过 SDK/API 使用预热 Pod，以及自动选池、容量管理、标签路由的完整操作指南。</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">创建方式</div></div>
+      <div class="hero-stat"><div class="num">2</div><div class="lbl">SDK 路径</div></div>
+      <div class="hero-stat"><div class="num">5</div><div class="lbl">选池维度</div></div>
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">管理接口</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ 核心概念 ═══════ -->
+<div class="container" id="concept">
+<div class="section">
+<div class="section-label">Core Concepts</div>
+<div class="section-header"><h2>🧠 核心概念</h2><p>先理清两层 Pool、选池机制和数据流</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon orange">🏗️</div><div><div class="card-title">两层 Pool</div><div class="card-sub">独立但可桥接</div></div></div>
+    <div class="card-body">
+      <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+      <table class="info-table">
+        <thead><tr><th style="width:140px;"></th><th>服务端 Pool CRD</th><th>客户端 SDK Pool</th></tr></thead>
+        <tbody>
+          <tr><td>位置</td><td>Kubernetes CRD + Controller</td><td><code>opensandbox.pool_async</code></td></tr>
+          <tr><td>作用</td><td>预创建 Pod · 亚秒分配</td><td>本地 ID 缓冲 · 复用连接</td></tr>
+          <tr><td>管理</td><td>kubectl / Server API</td><td>Python SDK</td></tr>
+          <tr><td>桥接</td><td colspan="2" style="text-align:center;"><code>extensions={"poolRef":"name"}</code></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">🎯</div><div><div class="card-title">自动选池五维 Predicate</div></div></div>
+    <div class="card-body"><ul>
+      <li><strong>Capacity</strong> — <code>PoolMax - Allocated ≥ replicas</code></li>
+      <li><strong>Image</strong> — Pool 任一镜像 ∈ Sandbox 镜像集</li>
+      <li><strong>LabelSelector</strong> — 自定义标签匹配 (需 Profile 启用)</li>
+      <li><strong>NodeSelector</strong> — 节点亲和性兼容</li>
+      <li><strong>Resource</strong> — CPU/Memory 资源充足</li>
+      <li>Scorer: <strong>LeastAllocated</strong> (默认) — 选最空闲的池</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="note info" style="margin-top:16px;">
+  <strong>💡 数据流</strong>: SDK <code>extensions={"poolRef":"name"}</code> → Server 写入 <code>BatchSandbox.spec.poolRef</code> → Pool Controller 分配预热 Pod → 沙箱就绪
+</div>
+</div></div>
+
+<!-- ═══════ 创建多镜像池 ═══════ -->
+<div class="container" id="create-pool">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Step 1 — Create Pools</div>
+<div class="section-header"><h2>🏗️ 创建多镜像 Pool 资源池</h2><p>三种创建方式，适配不同场景</p></div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab(event,'tab-kubectl')">☸️ kubectl</button>
+  <button class="tab-btn" onclick="switchTab(event,'tab-api')">🌐 Server API</button>
+  <button class="tab-btn" onclick="switchTab(event,'tab-sdk')">🐍 Python SDK</button>
+</div>
+
+<div id="tab-kubectl" class="tab-panel">
+  <div class="code-block">
+    <span class="lang-tag">YAML — pool-python.yaml</span>
+    <pre><span class="kw">apiVersion:</span> sandbox.opensandbox.io/v1alpha1
+<span class="kw">kind:</span> Pool
+<span class="kw">metadata:</span>
+  <span class="kw">name:</span> pool-python
+  <span class="kw">namespace:</span> opensandbox
+  <span class="kw">labels:</span>                            <span class="cmt"># 可选: 用于 LabelSelector 路由</span>
+    <span class="kw">runtime:</span> <span class="str">"python"</span>
+    <span class="kw">tier:</span> <span class="str">"standard"</span>
+<span class="kw">spec:</span>
+  <span class="kw">template:</span>
+    <span class="kw">spec:</span>
+      <span class="kw">containers:</span>
+      <span class="kw">- name:</span> sandbox
+        <span class="kw">image:</span> registry.example.com/code-interpreter:v2-python3.12
+        <span class="kw">command:</span> [<span class="str">"sleep"</span>, <span class="str">"infinity"</span>]
+        <span class="kw">resources:</span>
+          <span class="kw">limits:</span>   { <span class="kw">cpu:</span> <span class="str">"1"</span>, <span class="kw">memory:</span> <span class="str">"2Gi"</span> }
+          <span class="kw">requests:</span> { <span class="kw">cpu:</span> <span class="str">"500m"</span>, <span class="kw">memory:</span> <span class="str">"1Gi"</span> }
+  <span class="kw">capacitySpec:</span>
+    <span class="kw">bufferMax:</span> <span class="num">10</span>    <span class="cmt"># 空闲缓冲上限</span>
+    <span class="kw">bufferMin:</span> <span class="num">3</span>     <span class="cmt"># 空闲缓冲下限</span>
+    <span class="kw">poolMax:</span> <span class="num">50</span>     <span class="cmt"># 池绝对上限</span>
+    <span class="kw">poolMin:</span> <span class="num">5</span>      <span class="cmt"># 池绝对下限</span>
+  <span class="kw">recycleStrategy:</span>
+    <span class="kw">type:</span> Restart               <span class="cmt"># Pod 回池时重启容器</span></pre>
+  </div>
+  <div class="code-block" style="margin-top:12px;">
+    <span class="lang-tag">YAML — pool-nodejs.yaml</span>
+    <pre><span class="kw">apiVersion:</span> sandbox.opensandbox.io/v1alpha1
+<span class="kw">kind:</span> Pool
+<span class="kw">metadata:</span>
+  <span class="kw">name:</span> pool-nodejs
+  <span class="kw">namespace:</span> opensandbox
+  <span class="kw">labels:</span> { <span class="kw">runtime:</span> <span class="str">"nodejs"</span>, <span class="kw">tier:</span> <span class="str">"standard"</span> }
+<span class="kw">spec:</span>
+  <span class="kw">template:</span>
+    <span class="kw">spec:</span>
+      <span class="kw">containers:</span>
+      <span class="kw">- name:</span> sandbox
+        <span class="kw">image:</span> registry.example.com/code-interpreter:v2-node20
+        <span class="kw">command:</span> [<span class="str">"sleep"</span>, <span class="str">"infinity"</span>]
+        <span class="kw">resources:</span>
+          <span class="kw">limits:</span>   { <span class="kw">cpu:</span> <span class="str">"1"</span>, <span class="kw">memory:</span> <span class="str">"2Gi"</span> }
+          <span class="kw">requests:</span> { <span class="kw">cpu:</span> <span class="str">"500m"</span>, <span class="kw">memory:</span> <span class="str">"1Gi"</span> }
+  <span class="kw">capacitySpec:</span>
+    <span class="kw">bufferMax:</span> <span class="num">8</span>
+    <span class="kw">bufferMin:</span> <span class="num">2</span>
+    <span class="kw">poolMax:</span> <span class="num">30</span>
+    <span class="kw">poolMin:</span> <span class="num">3</span></pre>
+  </div>
+  <div class="code-block" style="margin-top:12px;">
+    <span class="lang-tag">YAML — pool-gpu.yaml (GPU 池)</span>
+    <pre><span class="kw">apiVersion:</span> sandbox.opensandbox.io/v1alpha1
+<span class="kw">kind:</span> Pool
+<span class="kw">metadata:</span>
+  <span class="kw">name:</span> pool-python-gpu
+  <span class="kw">namespace:</span> opensandbox
+  <span class="kw">labels:</span> { <span class="kw">runtime:</span> <span class="str">"python"</span>, <span class="kw">tier:</span> <span class="str">"gpu"</span> }
+<span class="kw">spec:</span>
+  <span class="kw">template:</span>
+    <span class="kw">spec:</span>
+      <span class="kw">containers:</span>
+      <span class="kw">- name:</span> sandbox
+        <span class="kw">image:</span> registry.example.com/code-interpreter:v2-python3.12-gpu
+        <span class="kw">command:</span> [<span class="str">"sleep"</span>, <span class="str">"infinity"</span>]
+        <span class="kw">resources:</span>
+          <span class="kw">limits:</span>   { <span class="kw">cpu:</span> <span class="str">"4"</span>, <span class="kw">memory:</span> <span class="str">"16Gi"</span>, <span class="kw">nvidia.com/gpu:</span> <span class="str">"1"</span> }
+          <span class="kw">requests:</span> { <span class="kw">cpu:</span> <span class="str">"2"</span>, <span class="kw">memory:</span> <span class="str">"8Gi"</span>, <span class="kw">nvidia.com/gpu:</span> <span class="str">"1"</span> }
+      <span class="kw">nodeSelector:</span>                    <span class="cmt"># GPU 节点亲和性</span>
+        <span class="kw">accelerator:</span> nvidia
+  <span class="kw">capacitySpec:</span>
+    <span class="kw">bufferMax:</span> <span class="num">3</span>
+    <span class="kw">bufferMin:</span> <span class="num">1</span>
+    <span class="kw">poolMax:</span> <span class="num">8</span>
+    <span class="kw">poolMin:</span> <span class="num">1</span></pre>
+  </div>
+  <div class="note tip"><strong>🚀 一键部署</strong>: <code>kubectl apply -f pool-python.yaml -f pool-nodejs.yaml -f pool-gpu.yaml</code></div>
+</div>
+
+<div id="tab-api" class="tab-panel" style="display:none;">
+  <div class="code-block">
+    <span class="lang-tag">Shell — curl</span>
+    <pre>curl -X POST https://api.example.com/v1/pools \
+  -H <span class="str">"OPEN-SANDBOX-API-KEY: $API_KEY"</span> \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -d <span class="str">'{
+    "name": "pool-python",
+    "template": {
+      "spec": {
+        "containers": [{
+          "name": "sandbox",
+          "image": "registry.example.com/code-interpreter:v2-python3.12",
+          "command": ["sleep","infinity"],
+          "resources": {"limits":{"cpu":"1","memory":"2Gi"},"requests":{"cpu":"500m","memory":"1Gi"}}
+        }]
+      }
+    },
+    "capacitySpec": {
+      "bufferMax": 10, "bufferMin": 3, "poolMax": 50, "poolMin": 5
+    }
+  }'</span></pre>
+  </div>
+</div>
+
+<div id="tab-sdk" class="tab-panel" style="display:none;">
+  <div class="code-block">
+    <span class="lang-tag">Python — requests</span>
+    <pre><span class="kw">import</span> requests
+
+resp = requests.post(
+    <span class="str">"https://api.example.com/v1/pools"</span>,
+    headers={<span class="str">"OPEN-SANDBOX-API-KEY"</span>: api_key, <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span>},
+    json={
+        <span class="str">"name"</span>: <span class="str">"pool-python"</span>,
+        <span class="str">"template"</span>: {
+            <span class="str">"spec"</span>: {
+                <span class="str">"containers"</span>: [{
+                    <span class="str">"name"</span>: <span class="str">"sandbox"</span>,
+                    <span class="str">"image"</span>: <span class="str">"registry.example.com/code-interpreter:v2-python3.12"</span>,
+                    <span class="str">"command"</span>: [<span class="str">"sleep"</span>, <span class="str">"infinity"</span>],
+                    <span class="str">"resources"</span>: {<span class="str">"limits"</span>: {<span class="str">"cpu"</span>:<span class="str">"1"</span>,<span class="str">"memory"</span>:<span class="str">"2Gi"</span>}}
+                }]
+            }
+        },
+        <span class="str">"capacitySpec"</span>: {<span class="str">"bufferMax"</span>:<span class="num">10</span>,<span class="str">"bufferMin"</span>:<span class="num">3</span>,<span class="str">"poolMax"</span>:<span class="num">50</span>,<span class="str">"poolMin"</span>:<span class="num">5</span>}
+    }
+)</pre>
+  </div>
+  <div class="note info"><strong>⚠️ 注意</strong>: SDK 当前没有 Pool CRD 管理的封装类，需直接 HTTP 调用或 kubectl。</div>
+</div>
+
+<div class="note info" style="margin-top:20px;">
+  <strong>📊 容量参数速查</strong>: <code>poolMin ≤ total ≤ poolMax</code> · <code>bufferMin ≤ (total-allocated) ≤ bufferMax</code> · 缓冲超范围时回到 <code>(min+max)/2</code>
+</div>
+</div></div>
+
+<!-- ═══════ 使用 WARM POD ═══════ -->
+<div class="container" id="use-warm">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Step 2 — Use Warm Pods</div>
+<div class="section-header"><h2>🔥 使用预热 Pod</h2><p>两种 SDK 路径：直接指定 poolRef 或通过客户端 Pool 间接使用</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon orange">🎯</div><div><div class="card-title">路径 A — 直接指定 poolRef</div><div class="card-sub">Sandbox.create() · 最简用法</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Python</span>
+        <pre><span class="kw">from</span> opensandbox <span class="kw">import</span> Sandbox
+<span class="kw">from</span> datetime <span class="kw">import</span> timedelta
+
+sandbox = <span class="kw">await</span> Sandbox.create(
+    <span class="cmt"># image 可选 — Pool 模板定义镜像</span>
+    extensions={<span class="str">"poolRef"</span>: <span class="str">"pool-python"</span>},  <span class="cmt"># ← 关键</span>
+    timeout=timedelta(minutes=<span class="num">30</span>),
+
+    <span class="cmt"># 可选: 覆盖 entrypoint/env</span>
+    entrypoint=[<span class="str">"python"</span>, <span class="str">"-c"</span>, <span class="str">"import sys; print(sys.version)"</span>],
+    env={<span class="str">"MY_VAR"</span>: <span class="str">"hello"</span>},
+)
+
+<span class="cmt"># 使用沙箱</span>
+result = <span class="kw">await</span> sandbox.command.run(<span class="str">"echo hello"</span>)
+<span class="kw">await</span> sandbox.kill()</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">🔄</div><div><div class="card-title">路径 B — 客户端 SDK Pool</div><div class="card-sub">SandboxPoolAsync · 本地缓冲 + 预热</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Python</span>
+        <pre><span class="kw">from</span> opensandbox <span class="kw">import</span> SandboxPoolAsync, PoolCreationSpec, InMemoryAsyncPoolStateStore
+<span class="kw">from</span> opensandbox.config <span class="kw">import</span> ConnectionConfig
+
+spec = PoolCreationSpec(
+    extensions={<span class="str">"poolRef"</span>: <span class="str">"pool-python"</span>}, <span class="cmt"># ← 所有创建通过服务端 Pool</span>
+    resource={<span class="str">"cpu"</span>: <span class="str">"1"</span>, <span class="str">"memory"</span>: <span class="str">"2Gi"</span>},
+)
+
+pool = SandboxPoolAsync(
+    pool_name=<span class="str">"fast-python-pool"</span>,
+    max_idle=<span class="num">5</span>,                            <span class="cmt"># 本地缓冲 5 个就绪沙箱</span>
+    state_store=InMemoryAsyncPoolStateStore(),
+    connection_config=ConnectionConfig(api_key=<span class="str">"..."</span>, domain=<span class="str">"api.example.com"</span>),
+    creation_spec=spec,
+)
+
+<span class="kw">await</span> pool.start()
+sandbox = <span class="kw">await</span> pool.acquire(timeout=timedelta(hours=<span class="num">1</span>))
+<span class="cmt"># ... 使用 sandbox ...</span>
+<span class="kw">await</span> pool.shutdown()</pre>
+      </div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ 自动选池 ═══════ -->
+<div class="container" id="auto-assign">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Step 3 — Auto Assign</div>
+<div class="section-header"><h2>🎯 自动选池策略</h2><p>不指定 poolRef 时，Controller 通过 Predicate + Scorer 链自动匹配最优 Pool</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon orange">🔍</div><div><div class="card-title">策略 A — 镜像自动匹配</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Python</span>
+        <pre><span class="cmt"># 声明镜像需求 → Controller 自动选 pool-nodejs</span>
+sandbox = <span class="kw">await</span> Sandbox.create(
+    extensions={
+        <span class="str">"template"</span>: {
+            <span class="str">"spec"</span>: {
+                <span class="str">"containers"</span>: [{
+                    <span class="str">"name"</span>: <span class="str">"main"</span>,
+                    <span class="str">"image"</span>: <span class="str">"registry.example.com/code-interpreter:v2-node20"</span>
+                }]
+            }
+        }
+    },
+    timeout=timedelta(minutes=<span class="num">30</span>),
+)
+<span class="cmt"># → 自动匹配 pool-nodejs (镜像匹配) ✓</span></pre>
+      </div>
+      <div class="note tip" style="margin-top:8px;margin-bottom:0;">
+        <strong>匹配逻辑</strong>: Pool 任一容器镜像 ∈ Sandbox 模板镜像集合 → 通过 ImagePredicate
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-icon purple">🏷️</div><div><div class="card-title">策略 B — GPU 资源过滤</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Python</span>
+        <pre><span class="cmt"># GPU 镜像 + GPU 资源 → ResourcePredicate 自动筛掉 CPU 池</span>
+sandbox = <span class="kw">await</span> Sandbox.create(
+    extensions={
+        <span class="str">"template"</span>: {
+            <span class="str">"spec"</span>: {
+                <span class="str">"containers"</span>: [{
+                    <span class="str">"name"</span>: <span class="str">"main"</span>,
+                    <span class="str">"image"</span>: <span class="str">"registry.example.com/code-interpreter:v2-python3.12-gpu"</span>,
+                    <span class="str">"resources"</span>: {
+                        <span class="str">"requests"</span>: {<span class="str">"nvidia.com/gpu"</span>: <span class="str">"1"</span>}
+                    }
+                }]
+            }
+        }
+    },
+    timeout=timedelta(minutes=<span class="num">30</span>),
+)
+<span class="cmt"># pool-python     ✗ (无 GPU 资源)</span>
+<span class="cmt"># pool-python-gpu ✓ (有 GPU 资源)</span>
+<span class="cmt"># pool-nodejs     ✗ (镜像不匹配 + 无 GPU)</span></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:20px;">
+  <div class="card-header"><div class="card-icon blue">🏷️</div><div><div class="card-title">策略 C — Label 标签精确路由 (需自定义 Profile)</div></div></div>
+  <div class="card-body">
+    <div class="flow-h">
+      <div class="flow-box"><b>Pool Label</b><span>runtime: python</span></div><div class="flow-arr">=</div>
+      <div class="flow-box"><b>Sandbox Label</b><span>runtime: python</span></div><div class="flow-arr">→</div>
+      <div class="flow-box" style="border-color:var(--accent);"><b>LabelSelector Predicate</b><span>匹配 ✓</span></div>
+    </div>
+    <div class="code-block" style="margin-top:12px;">
+      <span class="lang-tag">Shell — 自定义 Profile (需 Controller 配置)</span>
+      <pre><span class="kw">name:</span> <span class="str">"gpu-vs-cpu"</span>
+<span class="kw">plugins:</span>
+  <span class="kw">predicate:</span> [<span class="str">"capacity"</span>, <span class="str">"image"</span>, <span class="str">"resource"</span>, <span class="str">"nodeselector"</span>, <span class="str">"labelselector"</span>]
+  <span class="kw">score:</span> [{<span class="kw">name:</span> <span class="str">"resbalance"</span>, <span class="kw">weight:</span> <span class="num">100</span>}]
+<span class="kw">pluginConf:</span>
+  <span class="kw">- name:</span> <span class="str">"labelselector"</span>
+    <span class="kw">args:</span> {<span class="kw">keys:</span> [<span class="str">"runtime"</span>, <span class="str">"tier"</span>]}    <span class="cmt"># 必须匹配的 label key</span></pre>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ SDK 最佳实践 ═══════ -->
+<div class="container" id="sdk-best">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Best Practices</div>
+<div class="section-header"><h2>🐍 SDK 最佳实践</h2><p>生产环境推荐模式和完整代码示例</p></div>
+
+<div class="step-list">
+  <div class="step-item">
+    <h4>初始化服务端 Pool (一次性)</h4>
+    <div class="code-block" style="margin-top:8px;">
+      <span class="lang-tag">Shell</span>
+      <pre>kubectl apply -f pool-python.yaml -f pool-nodejs.yaml -f pool-gpu.yaml
+kubectl get pods -l sandbox.opensandbox.io/pool-name   <span class="cmt"># 查看预热 Pod 状态</span></pre>
+    </div>
+  </div>
+  <div class="step-item">
+    <h4>创建连接配置 + 客户端 Pool</h4>
+    <div class="code-block" style="margin-top:8px;">
+      <span class="lang-tag">Python</span>
+      <pre><span class="kw">from</span> opensandbox.config <span class="kw">import</span> ConnectionConfig
+<span class="kw">from</span> opensandbox <span class="kw">import</span> SandboxPoolAsync, PoolCreationSpec, InMemoryAsyncPoolStateStore
+
+<span class="cmt"># 为每个镜像创建一个客户端 Pool</span>
+config = ConnectionConfig(api_key=<span class="str">"sk-xxx"</span>, domain=<span class="str">"api.example.com"</span>)
+
+python_pool = SandboxPoolAsync(
+    pool_name=<span class="str">"python-workers"</span>, max_idle=<span class="num">10</span>,
+    state_store=InMemoryAsyncPoolStateStore(),
+    connection_config=config,
+    creation_spec=PoolCreationSpec(
+        extensions={<span class="str">"poolRef"</span>: <span class="str">"pool-python"</span>},
+        resource={<span class="str">"cpu"</span>: <span class="str">"1"</span>, <span class="str">"memory"</span>: <span class="str">"2Gi"</span>},
+        env={<span class="str">"PYTHONPATH"</span>: <span class="str">"/workspace"</span>},
+    ),
+    warmup_sandbox_preparer=<span class="kw">lambda</span> s: s.files.write_file(<span class="str">"/tmp/ready"</span>, <span class="str">"ok"</span>),
+)
+
+nodejs_pool = SandboxPoolAsync(
+    pool_name=<span class="str">"nodejs-workers"</span>, max_idle=<span class="num">5</span>,
+    state_store=InMemoryAsyncPoolStateStore(),
+    connection_config=config,
+    creation_spec=PoolCreationSpec(
+        extensions={<span class="str">"poolRef"</span>: <span class="str">"pool-nodejs"</span>},
+    ),
+)</pre>
+    </div>
+  </div>
+  <div class="step-item">
+    <h4>启动 + 使用时选择对应 Pool</h4>
+    <div class="code-block" style="margin-top:8px;">
+      <span class="lang-tag">Python</span>
+      <pre><span class="kw">await</span> python_pool.start()
+<span class="kw">await</span> nodejs_pool.start()
+
+<span class="kw">async def</span> <span class="fn">execute_python_code</span>(code: str) -> str:
+    sandbox = <span class="kw">await</span> python_pool.acquire(timeout=timedelta(minutes=<span class="num">2</span>))
+    <span class="kw">try</span>:
+        result = <span class="kw">await</span> sandbox.command.run(<span class="str">f"python -c '</span>{code}<span class="str">'"</span>)
+        <span class="kw">return</span> result.stdout
+    <span class="kw">finally</span>:
+        <span class="kw">await</span> python_pool.release(sandbox)  <span class="cmt"># 归还给客户端缓冲</span>
+
+<span class="kw">async def</span> <span class="fn">execute_nodejs_code</span>(code: str) -> str:
+    sandbox = <span class="kw">await</span> nodejs_pool.acquire(timeout=timedelta(minutes=<span class="num">2</span>))
+    <span class="kw">try</span>:
+        result = <span class="kw">await</span> sandbox.command.run(<span class="str">f"node -e '</span>{code}<span class="str">'"</span>)
+        <span class="kw">return</span> result.stdout
+    <span class="kw">finally</span>:
+        <span class="kw">await</span> nodejs_pool.release(sandbox)</pre>
+    </div>
+  </div>
+  <div class="step-item">
+    <h4>优雅关闭</h4>
+    <div class="code-block" style="margin-top:8px;">
+      <span class="lang-tag">Python</span>
+      <pre><span class="kw">import</span> signal
+
+<span class="kw">def</span> <span class="fn">shutdown_handler</span>(sig, frame):
+    <span class="kw">asyncio.create_task</span>(python_pool.shutdown())
+    <span class="kw">asyncio.create_task</span>(nodejs_pool.shutdown())
+
+signal.signal(signal.SIGINT, shutdown_handler)
+signal.signal(signal.SIGTERM, shutdown_handler)</pre>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ 运维管理 ═══════ -->
+<div class="container" id="manage">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Operations</div>
+<div class="section-header"><h2>🔧 运维管理</h2><p>日常运维操作和容量规划</p></div>
+
+<div class="grid-3">
+  <div class="card">
+    <div class="card-header"><div class="card-icon orange">📊</div><div><div class="card-title">查看 Pool 状态</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Shell</span>
+        <pre><span class="cmt"># 列出所有 Pool</span>
+kubectl get pools -A
+kubectl get pool pool-python -o yaml
+
+<span class="cmt"># 查看关键指标</span>
+kubectl get pool pool-python \
+  -o jsonpath=<span class="str">'{.status}'</span> | jq
+<span class="cmt"># {"total":15,"allocated":8,"available":5,"updated":12,"revision":"a1b2c3d4"}</span></pre>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">📈</div><div><div class="card-title">动态调整容量</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Shell</span>
+        <pre><span class="cmt"># 扩容 — 更新 capacitySpec</span>
+kubectl patch pool pool-python --type merge -p <span class="str">'{
+  "spec":{"capacitySpec":{
+    "bufferMax":20,"bufferMin":5,
+    "poolMax":100,"poolMin":10
+  }}
+}'</span>
+
+<span class="cmt"># 或通过 Server API</span>
+curl -X PUT https://api.example.com/v1/pools/pool-python \
+  -H <span class="str">"OPEN-SANDBOX-API-KEY: $KEY"</span> \
+  -d <span class="str">'{"capacitySpec":{...}}'</span></pre>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">🔄</div><div><div class="card-title">更新模板 (滚动更新)</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Shell</span>
+        <pre><span class="cmt"># 修改镜像版本 → Controller 自动滚动更新</span>
+kubectl patch pool pool-python --type merge -p <span class="str">'{
+  "spec":{"template":{"spec":{"containers":[{
+    "name":"sandbox",
+    "image":"registry.example.com/code-interpreter:v3"
+  }]}}}
+}'</span>
+
+<span class="cmt"># 查看滚动进度</span>
+kubectl get pool pool-python \
+  -o jsonpath=<span class="str">'{.status.updated}/{.status.total}'</span></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note info" style="margin-top:20px;">
+  <strong>📊 容量规划建议</strong>: <code>bufferMin = max_concurrent_users × 0.5</code> · <code>bufferMax = bufferMin × 3</code> · <code>poolMin = bufferMin + avg_allocated</code> · <code>poolMax = poolMin × 3</code>
+</div>
+</div></div>
+
+<!-- ═══════ 故障排查 ═══════ -->
+<div class="container" id="trouble">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Troubleshooting</div>
+<div class="section-header"><h2>🔍 故障排查</h2></div>
+
+<div class="table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+<table class="info-table">
+  <thead><tr><th style="width:180px;">问题</th><th>排查命令</th><th>解决方法</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Pool Pod 不创建</td>
+      <td><code>kubectl describe pool &lt;name&gt;</code> · <code>kubectl logs -l control-plane=controller-manager</code></td>
+      <td>检查 capacitySpec 是否合法 · Controller 日志 · 节点资源是否充足</td>
+    </tr>
+    <tr>
+      <td>Sandbox 长时间 Pending</td>
+      <td><code>kubectl get batchsandbox &lt;id&gt; -o yaml</code></td>
+      <td>Pool 无空闲 Pod → 增大 bufferMin · PoolMax 是否已达上限</td>
+    </tr>
+    <tr>
+      <td>poolRef 不生效</td>
+      <td>检查 SDK 请求 <code>extensions={"poolRef":"name"}</code></td>
+      <td>确认 Pool 名称正确 · Pool 存在且 status.available > 0</td>
+    </tr>
+    <tr>
+      <td>自动选池失败</td>
+      <td><code>kubectl get batchsandbox &lt;id&gt; -o jsonpath='{.status.conditions}'</code></td>
+      <td>检查 Predicate 是否满足 · 镜像名是否一致 · 资源是否充足</td>
+    </tr>
+    <tr>
+      <td>Pod 分配后未释放</td>
+      <td><code>kubectl get batchsandbox &lt;id&gt; -o jsonpath='{.metadata.annotations}'</code></td>
+      <td>检查 alloc-release/alloc-released 注解 · Finalizer 是否卡住</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note warn" style="margin-top:16px;">
+  <strong>⚠️ 约束清单</strong><br>
+  · Pool 模式下 <code>volumes</code>、<code>credentialProxy</code>、<code>platform</code> 不支持 — 由 Pool 模板定义<br>
+  · Pause/Resume 仅支持 <code>replicas=1</code> · 暂停后脱离 Pool<br>
+  · <code>entrypoint</code>/<code>env</code> 通过 taskTemplate 注入覆盖 Pool 默认值<br>
+  · 客户端 SDK Pool 独立于服务端 Pool CRD — 仅在 <code>extensions</code> 层面桥接
+</div>
+</div></div>
+
+<footer class="footer">
+  <p>OpenSandbox — <a href="https://github.com/alibaba/OpenSandbox" target="_blank">github.com/alibaba/OpenSandbox</a></p>
+  <p style="margin-top:8px;">多镜像 Pool 管理 & Warm Pool 使用指南 · Python SDK + kubectl + Server API</p>
+</footer>
+
+<script>
+function switchTab(event, tabId) {
+  document.querySelectorAll('.tab-panel').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(tabId).style.display = 'block';
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

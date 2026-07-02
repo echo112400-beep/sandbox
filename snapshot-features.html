@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenSandbox — 沙箱快照 (Pause/Resume)</title>
+<style>
+  :root {
+    --bg: #07070d;
+    --surface: #111118;
+    --surface2: #181825;
+    --border: #252540;
+    --text: #e8e8f4;
+    --text2: #8e8eb8;
+    --accent: #7c5cfc;
+    --accent2: #a78bfa;
+    --green: #00e0a0;
+    --blue: #5ea0ff;
+    --orange: #ffa050;
+    --pink: #ff6b8a;
+    --red: #f06070;
+    --yellow: #fed040;
+    --cyan: #00d8d8;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow: 0 12px 48px rgba(0,0,0,0.35);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    overflow-x: hidden;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    position: relative; padding: 100px 24px 80px; text-align: center; overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(124,92,252,0.25), transparent 70%),
+                radial-gradient(ellipse 50% 40% at 30% 90%, rgba(0,224,160,0.10), transparent 60%),
+                radial-gradient(ellipse 40% 35% at 75% 80%, rgba(94,160,255,0.10), transparent 60%);
+  }
+  .hero-content { position:relative; z-index:1; max-width:800px; margin:0 auto; }
+  .hero-badge {
+    display:inline-flex; align-items:center; gap:8px; padding:6px 16px;
+    border-radius:99px; font-size:13px; font-weight:600;
+    background:rgba(124,92,252,0.14); color:var(--accent2);
+    border:1px solid rgba(124,92,252,0.3); margin-bottom:20px;
+  }
+  .hero h1 { font-size:clamp(32px,5vw,56px); font-weight:800; letter-spacing:-1.5px; margin-bottom:12px; }
+  .hero h1 span { background:linear-gradient(135deg,var(--accent),var(--green),var(--blue)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .hero p { font-size:17px; color:var(--text2); max-width:580px; margin:0 auto 28px; }
+  .hero-stats { display:flex; justify-content:center; gap:40px; flex-wrap:wrap; }
+  .hero-stat { text-align:center; }
+  .hero-stat .num { font-size:28px; font-weight:800; color:var(--accent2); }
+  .hero-stat .lbl { font-size:12px; color:var(--text2); margin-top:2px; }
+
+  /* ── Layout ── */
+  .container { max-width:1160px; margin:0 auto; padding:0 24px; }
+  .section { padding:72px 0; }
+  .section-label {
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+    text-transform:uppercase; letter-spacing:1px; color:var(--accent2);
+    margin-bottom:8px;
+  }
+  .section-label::before { content:''; width:4px; height:4px; border-radius:50%; background:var(--accent); }
+  .section-header { margin-bottom:48px; }
+  .section-header h2 { font-size:26px; font-weight:700; margin-bottom:6px; }
+  .section-header p { color:var(--text2); font-size:14px; max-width:600px; }
+
+  /* ── Architecture Card ── */
+  .arch-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:28px 32px; margin-bottom:24px; position:relative; overflow:hidden;
+  }
+  .arch-card::after {
+    content:''; position:absolute; top:0; left:0; width:3px; height:100%;
+    background:linear-gradient(180deg,var(--accent),var(--green));
+    border-radius:3px 0 0 3px;
+  }
+  .arch-card h3 { font-size:18px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:10px; }
+  .arch-card p { color:var(--text2); font-size:14px; }
+
+  /* ── Flow Diagram ── */
+  .flow-section { margin-bottom:48px; }
+  .flow-section h3 { font-size:18px; margin-bottom:24px; display:flex; align-items:center; gap:10px; }
+  .flow-badge {
+    padding:4px 12px; border-radius:99px; font-size:12px; font-weight:700; letter-spacing:.3px;
+    background:rgba(124,92,252,0.12); color:var(--accent2);
+  }
+  .flow-badge.green { background:rgba(0,224,160,0.12); color:var(--green); }
+  .flow-badge.orange { background:rgba(255,160,80,0.12); color:var(--orange); }
+
+  /* ── Swimlane Flow ── */
+  .swimlane {
+    display:flex; flex-direction:column; gap:0;
+    border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; background:var(--surface); margin-bottom:32px;
+  }
+  .swimlane-header {
+    display:grid; grid-template-columns:120px 1fr;
+    background:var(--surface2); border-bottom:1px solid var(--border);
+    font-size:11px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.5px; color:var(--text2);
+  }
+  .swimlane-header > div {
+    padding:12px 16px; border-right:1px solid var(--border);
+  }
+  .swimlane-actor {
+    padding:12px 16px; border-right:1px solid var(--border);
+    font-size:13px; font-weight:700; color:var(--accent2);
+    display:flex; align-items:center; gap:8px;
+    background:var(--surface2);
+  }
+  .swimlane-row {
+    display:grid; grid-template-columns:120px 1fr;
+    border-bottom:1px solid var(--border);
+    min-height:56px;
+  }
+  .swimlane-row:last-child { border-bottom:none; }
+  .swimlane-actor {
+    padding:16px; border-right:1px solid var(--border);
+    font-size:13px; font-weight:600;
+    display:flex; align-items:flex-start; gap:8px;
+  }
+  .swimlane-steps { padding:12px 16px; display:flex; flex-direction:column; gap:8px; overflow-x:auto; }
+  .step {
+    display:flex; align-items:flex-start; gap:12px; padding:10px 14px;
+    background:var(--surface2); border-radius:var(--radius-sm);
+    border:1px solid transparent; transition:all .2s;
+  }
+  .step:hover { border-color:var(--border); }
+  .step-num {
+    width:28px; height:28px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:800;
+    background:rgba(124,92,252,0.15); color:var(--accent2);
+  }
+  .step-num.green { background:rgba(0,224,160,0.15); color:var(--green); }
+  .step-num.orange { background:rgba(255,160,80,0.15); color:var(--orange); }
+  .step-num.blue { background:rgba(94,160,255,0.15); color:var(--blue); }
+  .step-num.pink { background:rgba(255,107,138,0.15); color:var(--pink); }
+  .step-body { flex:1; }
+  .step-body .title { font-size:14px; font-weight:600; margin-bottom:2px; }
+  .step-body .desc { font-size:12px; color:var(--text2); }
+  .step-body code {
+    background:rgba(124,92,252,0.1); color:var(--accent2);
+    padding:1px 6px; border-radius:4px; font-size:11px;
+  }
+
+  /* ── Arrow between rows ── */
+  .flow-arrow {
+    display:flex; align-items:center; justify-content:center;
+    padding:0 16px; height:36px;
+  }
+  .flow-arrow svg { width:24px; height:24px; color:var(--accent); }
+
+  /* ── Vertical Flow (compact) ── */
+  .vflow {
+    display:flex; flex-direction:column; gap:0; max-width:900px; margin:0 auto;
+  }
+  .vflow-step {
+    display:flex; gap:16px; align-items:flex-start; padding:16px 0; position:relative;
+    border-left:2px solid var(--border); margin-left:18px; padding-left:32px;
+  }
+  .vflow-step:first-child { border-left-color:var(--accent); }
+  .vflow-step:last-child { border-left-color:transparent; }
+  .vflow-dot {
+    position:absolute; left:-9px; top:20px;
+    width:16px; height:16px; border-radius:50%; background:var(--accent);
+    border:3px solid var(--bg);
+  }
+  .vflow-dot.green { background:var(--green); }
+  .vflow-dot.orange { background:var(--orange); }
+  .vflow-dot.blue { background:var(--blue); }
+  .vflow-dot.pink { background:var(--pink); }
+  .vflow-content {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:16px 20px; flex:1;
+  }
+  .vflow-content .phase {
+    display:inline-block; padding:3px 10px; border-radius:99px;
+    font-size:11px; font-weight:700; margin-bottom:8px;
+    background:rgba(124,92,252,0.12); color:var(--accent2);
+  }
+  .vflow-content .phase.green { background:rgba(0,224,160,0.12); color:var(--green); }
+  .vflow-content .phase.orange { background:rgba(255,160,80,0.12); color:var(--orange); }
+  .vflow-content h4 { font-size:15px; font-weight:700; margin-bottom:4px; }
+  .vflow-content p { font-size:13px; color:var(--text2); }
+  .vflow-content .note {
+    margin-top:8px; padding:8px 12px; background:rgba(124,92,252,0.06);
+    border-radius:6px; font-size:12px; color:var(--text2);
+    border-left:2px solid var(--accent);
+  }
+
+  /* ── State Machine ── */
+  .statemachine {
+    display:flex; align-items:center; gap:0; flex-wrap:wrap; justify-content:center;
+    padding:32px 0; font-size:13px;
+  }
+  .sm-state {
+    padding:10px 18px; border-radius:var(--radius-sm); font-weight:700;
+    border:2px solid var(--border); background:var(--surface); white-space:nowrap;
+    transition:all .3s;
+  }
+  .sm-state.active { border-color:var(--accent); background:rgba(124,92,252,0.08); color:var(--accent2); }
+  .sm-state.done { border-color:var(--green); background:rgba(0,224,160,0.08); color:var(--green); }
+  .sm-state.error { border-color:var(--red); background:rgba(240,96,112,0.08); color:var(--red); }
+  .sm-state.pending { border-color:var(--orange); background:rgba(255,160,80,0.08); color:var(--orange); }
+  .sm-arrow {
+    padding:0 6px; color:var(--text2); font-size:18px; flex-shrink:0;
+  }
+  .sm-label {
+    font-size:10px; color:var(--text2); text-align:center; margin-top:4px;
+    position:absolute; white-space:nowrap;
+  }
+
+  /* ── Grid Cards ── */
+  .grid-2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:20px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px; }
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; transition:all .25s;
+  }
+  .card:hover { border-color:rgba(124,92,252,0.4); transform:translateY(-2px); box-shadow:var(--shadow); }
+  .card-header { padding:20px 24px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--border); }
+  .card-icon { width:40px; height:40px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .card-icon.purple { background:rgba(124,92,252,0.15); color:var(--accent2); }
+  .card-icon.green { background:rgba(0,224,160,0.15); color:var(--green); }
+  .card-icon.orange { background:rgba(255,160,80,0.15); color:var(--orange); }
+  .card-icon.blue { background:rgba(94,160,255,0.15); color:var(--blue); }
+  .card-title { font-size:15px; font-weight:700; }
+  .card-sub { font-size:12px; color:var(--text2); }
+  .card-body { padding:16px 24px 20px; }
+  .card-body ul { list-style:none; display:flex; flex-direction:column; gap:6px; }
+  .card-body li { position:relative; padding-left:18px; font-size:13px; color:var(--text2); }
+  .card-body li::before { content:''; position:absolute; left:0; top:7px; width:5px; height:5px; border-radius:50%; background:var(--accent); opacity:.5; }
+  .card-body li strong { color:var(--text); font-weight:600; }
+
+  /* ── Code block ── */
+  .code-block {
+    background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:16px 20px; overflow-x:auto; margin-top:12px;
+  }
+  .code-block pre { font-family:'SF Mono','Fira Code','Cascadia Code',monospace; font-size:12px; line-height:1.7; color:var(--text); }
+  .code-block .kw { color:var(--pink); }
+  .code-block .str { color:var(--green); }
+  .code-block .cmt { color:var(--text2); }
+  .code-block .fn { color:var(--blue); }
+
+  /* ── Timeline ── */
+  .timeline { position:relative; padding:8px 0; }
+  .timeline::before {
+    content:''; position:absolute; left:16px; top:0; bottom:0; width:2px;
+    background:linear-gradient(180deg,var(--accent),var(--green),var(--blue),var(--accent));
+  }
+  .tl-item {
+    position:relative; padding-left:48px; padding-bottom:28px;
+  }
+  .tl-item:last-child { padding-bottom:0; }
+  .tl-dot {
+    position:absolute; left:9px; top:2px;
+    width:16px; height:16px; border-radius:50%; background:var(--surface);
+    border:2px solid var(--accent);
+  }
+  .tl-dot.green { border-color:var(--green); }
+  .tl-dot.orange { border-color:var(--orange); }
+  .tl-dot.blue { border-color:var(--blue); }
+  .tl-content { }
+  .tl-content .tl-phase { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--accent2); margin-bottom:4px; }
+  .tl-content h4 { font-size:15px; font-weight:700; margin-bottom:4px; }
+  .tl-content p { font-size:13px; color:var(--text2); }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x:auto; }
+  .info-table { width:100%; border-collapse:collapse; min-width:500px; }
+  .info-table th {
+    text-align:left; padding:10px 14px; font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.5px; color:var(--text2);
+    border-bottom:1px solid var(--border);
+  }
+  .info-table td { padding:10px 14px; font-size:13px; border-bottom:1px solid var(--border); }
+  .info-table tr:last-child td { border-bottom:none; }
+  .info-table td:first-child { color:var(--text); font-weight:600; width:180px; }
+
+  /* ── Tag ── */
+  .tag {
+    display:inline-flex; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:700;
+  }
+  .tag.ok { background:rgba(0,224,160,0.12); color:var(--green); }
+  .tag.warn { background:rgba(255,160,80,0.12); color:var(--orange); }
+
+  /* ── Responsive ── */
+  @media (max-width:768px) {
+    .swimlane { flex-direction:column; }
+    .swimlane-row { grid-template-columns:1fr; }
+    .swimlane-actor { border-right:none; border-bottom:1px solid var(--border); }
+    .grid-2, .grid-3 { grid-template-columns:1fr; }
+    .statemachine { flex-direction:column; gap:8px; }
+    .sm-arrow { transform:rotate(90deg); }
+    .hero { padding:60px 16px 48px; }
+  }
+
+  .footer {
+    text-align:center; padding:48px 24px; color:var(--text2); font-size:13px;
+    border-top:1px solid var(--border); margin-top:40px;
+  }
+  .footer a { color:var(--accent2); text-decoration:none; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════ HERO ════════════════ -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">📸 OSEP-0008 · Pause & Resume via Rootfs Snapshot</div>
+    <h1>沙箱<span>快照</span>系统</h1>
+    <p>声明式快照 — 暂停时将沙箱 rootfs 保存为 OCI 镜像，恢复时从快照重建。<br>支持 Docker commit 和 K8s SandboxSnapshot CRD 两种后端。</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">Controller 协作</div></div>
+      <div class="hero-stat"><div class="num">4</div><div class="lbl">快照阶段</div></div>
+      <div class="hero-stat"><div class="num">6</div><div class="lbl">Commit 步骤</div></div>
+      <div class="hero-stat"><div class="num">5</div><div class="lbl">调度 Case</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ ARCHITECTURE ════════════════ -->
+<div class="container">
+<div class="section">
+  <div class="section-label">Architecture</div>
+  <div class="section-header">
+    <h2>🏗️ 整体架构</h2>
+    <p>快照系统涉及三个 Controller + 一个命令行工具 + Server 端 Retry Bridge 协作</p>
+  </div>
+
+  <div class="arch-card">
+    <h3>📐 三层声明式架构</h3>
+    <p style="margin-bottom:20px;">Server 只写 <code style="background:rgba(124,92,252,0.1);color:var(--accent2);padding:1px 6px;border-radius:4px;">spec.pause</code>，Controller 不修改 <code style="background:rgba(124,92,252,0.1);color:var(--accent2);padding:1px 6px;border-radius:4px;">spec.pause</code>，完全解耦</p>
+
+    <div class="swimlane">
+      <div class="swimlane-row">
+        <div class="swimlane-actor" style="color:var(--yellow);">🐍 Server</div>
+        <div class="swimlane-steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body"><div class="title">校验 + 下发 Pause/Resume</div><div class="desc">校验 <code>status.phase</code> 是否允许操作 → patch <code>spec.pause=true/false</code> · 失败时 Retry Bridge 桥接 <code>nil→target</code></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="swimlane-row">
+        <div class="swimlane-actor" style="color:var(--accent2);">☸️ BatchSandbox<br>Controller</div>
+        <div class="swimlane-steps">
+          <div class="step">
+            <div class="step-num green">2</div>
+            <div class="step-body"><div class="title">dispatchPauseResume() — 5-Case 调度</div><div class="desc">优先处理进行中阶段 (Resuming/Pausing) → 再对比 generation 变化判断新请求</div></div>
+          </div>
+          <div class="step">
+            <div class="step-num green">3</div>
+            <div class="step-body"><div class="title">handlePause() — 创建 SandboxSnapshot 子资源</div><div class="desc">校验 replicas=1 → 停止 Task → ACK phase=Pausing → <code>ensureInternalPauseSnapshot()</code> 创建 Snapshot CRD (OwnerRef)</div></div>
+          </div>
+          <div class="step">
+            <div class="step-num green">4</div>
+            <div class="step-body"><div class="title">syncPauseOrClear() → completePause()</div><div class="desc">轮询 Snapshot 状态 → Succeed 时删除 Pod / 脱离 Pool → phase=Paused</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="swimlane-row">
+        <div class="swimlane-actor" style="color:var(--cyan);">📸 SandboxSnapshot<br>Controller</div>
+        <div class="swimlane-steps">
+          <div class="step">
+            <div class="step-num orange">5</div>
+            <div class="step-body"><div class="title">handlePending() — 创建 Commit Job</div><div class="desc">查询 BatchSandbox → findPodForSandbox() → 计算 imageURI → <code>buildCommitJob()</code> 调度到源 Pod 节点</div></div>
+          </div>
+          <div class="step">
+            <div class="step-num orange">6</div>
+            <div class="step-body"><div class="title">handleCommitting() — 轮询 Job 状态</div><div class="desc">Job Success → 从 <code>terminationMessage</code> 解析 digest → phase=Succeed · Job Fail → best-effort unpause Job → phase=Failed</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="swimlane-row">
+        <div class="swimlane-actor" style="color:var(--green);">🔧 Image<br>Committer</div>
+        <div class="swimlane-steps">
+          <div class="step">
+            <div class="step-num blue">7</div>
+            <div class="step-body"><div class="title">nerdctl 六步流程</div><div class="desc">定位容器 → pause → commit → unpause (always) → login + push → 提取 digest → 写入 termination-log</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ PAUSE FLOW ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Pause Flow</div>
+  <div class="section-header">
+    <h2>⏸️ Pause 完整流程</h2>
+    <p>从用户发起暂停请求到沙箱完全冻结的端到端流程</p>
+  </div>
+
+  <div class="vflow">
+    <div class="vflow-step">
+      <div class="vflow-dot"></div>
+      <div class="vflow-content">
+        <span class="phase">Phase 0 — Server 端</span>
+        <h4>POST /v1/sandboxes/{id}/pause</h4>
+        <p>校验 phase 必须为 <strong>Succeed</strong>（Paused/Pausing/Resuming/Failed 均拒绝）→ patch <code>spec.pause=true</code></p>
+        <div class="note">💡 <strong>Retry Bridge</strong>: 如果上次 Pause 失败 (PauseFailed=true)，Server 先 patch <code>nil</code> 再 patch <code>true</code>，两次操作完成桥接</div>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot green"></div>
+      <div class="vflow-content">
+        <span class="phase green">Phase 1 — dispatchPauseResume</span>
+        <h4>spec.pause=true ∧ generation > pauseObservedGen → handlePause()</h4>
+        <p>校验 replicas=1 → 停止 Task → <strong>ACK phase=Pausing, pauseObservedGen=gen</strong></p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot green"></div>
+      <div class="vflow-content">
+        <span class="phase green">Phase 2 — ensureInternalPauseSnapshot</span>
+        <h4>创建 SandboxSnapshot 子资源 (OwnerRef: BatchSandbox)</h4>
+        <p>snapshotName = <code>{sandboxName}-pause</code> · spec.sandboxName = BatchSandbox.Name</p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot orange"></div>
+      <div class="vflow-content">
+        <span class="phase orange">Phase 3 — Snapshot Controller: handlePending</span>
+        <h4>解析源 Pod → 计算 imageURI → buildCommitJob</h4>
+        <p>imageURI = <code>{registry}/{sandboxName}-{containerName}:snap-gen{generation}</code><br>
+        通过 Pool 分配注解 / Label / 命名规则三种方式查找 Pod</p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot blue"></div>
+      <div class="vflow-content">
+        <span class="phase">Phase 4 — Commit Job (K8s Job)</span>
+        <h4>image-committer 在源节点执行六步流程</h4>
+        <p>
+          ① nerdctl ps 定位容器 &nbsp;→&nbsp;
+          ② nerdctl pause (FS 一致性) &nbsp;→&nbsp;
+          ③ nerdctl commit (rootfs→OCI) &nbsp;→&nbsp;
+          ④ nerdctl unpause (always!) &nbsp;→&nbsp;
+          ⑤ nerdctl login + push &nbsp;→&nbsp;
+          ⑥ nerdctl inspect (digest)
+        </p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot orange"></div>
+      <div class="vflow-content">
+        <span class="phase orange">Phase 5 — Snapshot Controller: handleCommitting</span>
+        <h4>读取 Job Pod 的 terminationMessage → 解析 digest → phase=Succeed</h4>
+        <p>若 Job 失败 → best-effort <strong>unpause Job</strong> 恢复容器 → phase=Failed</p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot green"></div>
+      <div class="vflow-content">
+        <span class="phase green">Phase 6 — syncPauseOrClear → completePause</span>
+        <h4>Snapshot Succeed → 删除 Pod / 脱离 Pool → phase=Paused</h4>
+        <p>
+          <strong>非 Pool 模式</strong>: 直接删除所有 Pod<br>
+          <strong>Pool 模式</strong>: 从 Pod 固化模板 (去 Pool 标签) → 写回 spec.template → 清 poolRef → Pool GC 回收旧 Pod
+        </p>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ RESUME FLOW ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Resume Flow</div>
+  <div class="section-header">
+    <h2>▶️ Resume 完整流程</h2>
+    <p>从已暂停状态恢复到运行中</p>
+  </div>
+
+  <div class="vflow">
+    <div class="vflow-step">
+      <div class="vflow-dot"></div>
+      <div class="vflow-content">
+        <span class="phase">Phase 0 — Server 端</span>
+        <h4>POST /v1/sandboxes/{id}/resume</h4>
+        <p>校验 phase 必须为 <strong>Paused</strong> → patch <code>spec.pause=false</code></p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot green"></div>
+      <div class="vflow-content">
+        <span class="phase green">Phase 1 — handleResume</span>
+        <h4>ACK phase=Resuming + RequeueAfter 1s</h4>
+        <p>不做业务逻辑，仅确认收到请求，交由下轮 reconcile 执行</p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot green"></div>
+      <div class="vflow-content">
+        <span class="phase green">Phase 2 — continueResume</span>
+        <h4>从 Snapshot status 读取 imageURI → 替换 template 镜像</h4>
+        <p>
+          imageMap = <code>{containerName: snapshotImageURI}</code><br>
+          → <code>template.spec.containers[i].Image = imageMap[name]</code><br>
+          → 确保 imagePullSecret → Pool 模式清 poolRef
+        </p>
+        <div class="note">💡 若 Snapshot 不存在但已有 Ready Pod → 视为 resume 已完成（幂等保护）</div>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot pink"></div>
+      <div class="vflow-content">
+        <span class="phase">Phase 3 — 正常 Reconcile 流程</span>
+        <h4>scaleBatchSandbox() → 创建新 Pod (使用快照镜像)</h4>
+        <p>persistRuntimeView() → <strong>phase=Succeed</strong> → ACK generation</p>
+      </div>
+    </div>
+
+    <div class="vflow-step">
+      <div class="vflow-dot"></div>
+      <div class="vflow-content">
+        <span class="phase">Phase 4 — 清理</span>
+        <h4>下次 reconcile: dispatchPauseResume → generation==observed → skip</h4>
+        <p>Resume 成功后自动 <strong>deleteInternalPauseSnapshot()</strong></p>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ STATE MACHINE ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">State Machines</div>
+  <div class="section-header">
+    <h2>🔄 状态机</h2>
+    <p>BatchSandbox Phase 与 SandboxSnapshot Phase 联动</p>
+  </div>
+
+  <div style="margin-bottom:40px;">
+    <h3 style="font-size:16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+      <span class="flow-badge">BatchSandbox</span> Pause/Resume 阶段
+    </h3>
+    <div class="statemachine" style="position:relative;">
+      <div class="sm-state active">Succeed</div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-state pending">Pausing</div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-state done">Paused</div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-state pending">Resuming</div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-state active">Succeed</div>
+    </div>
+    <div style="text-align:center;margin-top:8px;">
+      <span style="font-size:12px;color:var(--text2);margin-right:16px;"><span style="color:var(--accent2);">●</span> Succeed — 正常运行</span>
+      <span style="font-size:12px;color:var(--text2);margin-right:16px;"><span style="color:var(--orange);">●</span> Pausing/Resuming — 过渡中</span>
+      <span style="font-size:12px;color:var(--text2);"><span style="color:var(--green);">●</span> Paused — 已冻结</span>
+    </div>
+  </div>
+
+  <div>
+    <h3 style="font-size:16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+      <span class="flow-badge green">SandboxSnapshot</span> 快照阶段
+    </h3>
+    <div class="statemachine" style="position:relative;">
+      <div class="sm-state pending">Pending</div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-state pending">Committing</div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-state done">Succeed</div>
+    </div>
+    <div style="text-align:center;margin-top:4px;">
+      <div style="margin-top:12px;">
+        <span class="sm-state pending" style="display:inline-flex;margin:0 8px;">Pending</span>
+        <span class="sm-arrow" style="display:inline-flex;">→</span>
+        <span class="sm-state pending" style="display:inline-flex;margin:0 8px;">Committing</span>
+        <span class="sm-arrow" style="display:inline-flex;">→</span>
+        <span class="sm-state error" style="display:inline-flex;margin:0 8px;">Failed</span>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ 5-CASE DISPATCH ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Core Logic</div>
+  <div class="section-header">
+    <h2>⚙️ 5-Case 调度表</h2>
+    <p>dispatchPauseResume() — 防止 Controller 自身 spec 变更被误判为新请求</p>
+  </div>
+
+  <div class="table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:0;overflow:hidden;">
+  <table class="info-table">
+    <thead>
+      <tr><th>优先级</th><th>条件</th><th>动作</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>🔴 最高</td>
+        <td><code>phase == Resuming</code></td>
+        <td><strong>continueResume()</strong></td>
+        <td>恢复流程进行中 → 替换镜像 → 等待正常流更新 phase</td>
+      </tr>
+      <tr>
+        <td>🟠 高</td>
+        <td><code>phase == Pausing</code></td>
+        <td><strong>syncPauseOrClear()</strong></td>
+        <td>暂停流程进行中 → 轮询 Snapshot 状态</td>
+      </tr>
+      <tr>
+        <td>🟡 中</td>
+        <td><code>gen > observed ∧ pause=true</code></td>
+        <td><strong>handlePause()</strong></td>
+        <td>新暂停请求 → ACK + 创建 Snapshot</td>
+      </tr>
+      <tr>
+        <td>🟢 中</td>
+        <td><code>gen > observed ∧ pause=false</code></td>
+        <td><strong>handleResume()</strong></td>
+        <td>新恢复请求 → ACK Resuming</td>
+      </tr>
+      <tr>
+        <td>⚪ 低</td>
+        <td><code>gen > observed ∧ pause=nil</code></td>
+        <td><strong>skip</strong></td>
+        <td>无 pause 意图 → persistRuntimeView 中 ACK</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</div></div>
+
+<!-- ════════════════ COMMIT JOB INTERNALS ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Commit Job Internals</div>
+  <div class="section-header">
+    <h2>🔧 Image Committer 内部流程</h2>
+    <p>用 nerdctl 直接操作 containerd，绕过 CRI 层</p>
+  </div>
+
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <div class="tl-phase">Step 1 — 定位容器</div>
+        <h4>nerdctl ps 查找容器 ID</h4>
+        <p>通过 K8s 标准标签筛选：<code>io.kubernetes.pod.name</code> + <code>io.kubernetes.pod.namespace</code> + <code>io.kubernetes.container.name</code></p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot orange"></div>
+      <div class="tl-content">
+        <div class="tl-phase">Step 2 — 暂停容器</div>
+        <h4>nerdctl pause {containerID}</h4>
+        <p>冻结容器进程以保证文件系统一致性。暂停失败的容器会被追踪用于后续恢复。</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot green"></div>
+      <div class="tl-content">
+        <div class="tl-phase">Step 3 — 提交镜像</div>
+        <h4>nerdctl commit {containerID} {registry}/{name}:{tag}</h4>
+        <p>将容器 rootfs 保存为 OCI 镜像。标签：内部快照 <code>snap-gen{generation}</code>，公开快照 <code>snap-{sha256}</code></p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot blue"></div>
+      <div class="tl-content">
+        <div class="tl-phase">Step 4 — 恢复容器 (ALWAYS!)</div>
+        <h4>nerdctl unpause {containerID}</h4>
+        <p><strong>无论 commit 成功或失败</strong>，必须恢复容器。Signal handler + defer 双保险。</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <div class="tl-phase">Step 5 — 推送镜像</div>
+        <h4>nerdctl login + push --insecure-registry</h4>
+        <p>从 <code>/var/run/opensandbox/registry/config.json</code> (Docker config) 读取凭证。自动判断是否使用 insecure registry。</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot green"></div>
+      <div class="tl-content">
+        <div class="tl-phase">Step 6 — 提取 Digest & 写入结果</div>
+        <h4>nerdctl inspect --format '{{.Id}}'</h4>
+        <p>JSON 写入 <code>/dev/termination-log</code>：<code>{"containers":[{"name":"sandbox","image":"...","digest":"sha256:..."}]}</code></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="code-block" style="margin-top:24px;">
+    <pre><span class="cmt"># Commit Job 的 SecurityContext</span>
+<span class="kw">RunAsUser:</span>                <span class="str">0</span>                       <span class="cmt"># root, 需要访问 containerd.sock</span>
+<span class="kw">AllowPrivilegeEscalation:</span>  <span class="str">false</span>                   <span class="cmt"># 禁止提权</span>
+<span class="kw">Capabilities:</span>             <span class="kw">Drop:</span> [<span class="str">"ALL"</span>]          <span class="cmt"># 去除所有 capabilities</span>
+<span class="kw">NodeName:</span>                  <span class="str">sourceNodeName</span>          <span class="cmt"># 调度到源 Pod 所在节点</span>
+<span class="kw">VolumeMounts:</span>
+  <span class="kw">- containerd.sock</span>  (<span class="str">HostPath</span>)          <span class="cmt"># 仅挂载必要路径</span>
+  <span class="kw">- registry-creds</span>    (<span class="str">Secret</span>)            <span class="cmt"># Docker config.json</span></pre>
+  </div>
+</div></div>
+
+<!-- ════════════════ KEY DETAILS ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Design Highlights</div>
+  <div class="section-header">
+    <h2>✨ 关键设计细节</h2>
+    <p>让快照系统可靠、安全、可重试的核心机制</p>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon purple">🔄</div>
+        <div><div class="card-title">Retry Bridge</div><div class="card-sub">Server 端可重试机制</div></div>
+      </div>
+      <div class="card-body"><ul>
+        <li><strong>PauseFailed 后重试</strong>: 先 patch <code>nil</code> 清旧值 → 再 patch <code>true</code></li>
+        <li>若第二步抛异常但 read-back 已是目标值 → 视为成功</li>
+        <li>否则重试一次 target patch</li>
+        <li>两步桥接确保 Controller 看到 <code>nil→true</code> 的 generation 变化</li>
+      </ul></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon green">🛡️</div>
+        <div><div class="card-title">Generation 栅栏</div><div class="card-sub">防止误判</div></div>
+      </div>
+      <div class="card-body"><ul>
+        <li><strong>pauseObservedGeneration</strong> 记录已处理的 generation</li>
+        <li>Controller 自身修改 spec (固化模板、替换镜像) 会导致 gen++</li>
+        <li>但不会误判为新 pause/resume — 因为进行中 phase 优先判断</li>
+        <li><code>completePause</code> 中只在 <code>pause=true</code> 时 ACK，防止覆盖 resume 请求</li>
+      </ul></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon orange">🔐</div>
+        <div><div class="card-title">万能恢复</div><div class="card-sub">容器 unpause 保证</div></div>
+      </div>
+      <div class="card-body"><ul>
+        <li><strong>正常路径</strong>: Step 4 在 commit 后自动 unpause</li>
+        <li><strong>失败路径</strong>: commit 失败也执行 Step 4 unpause</li>
+        <li><strong>信号路径</strong>: SIGINT/SIGTERM → signal handler → resumeAll</li>
+        <li><strong>Panic 路径</strong>: defer + recover → resumeAll</li>
+        <li>SnapshotController 在 Job 失败时额外创建 best-effort <strong>unpause Job</strong></li>
+      </ul></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon blue">🏊</div>
+        <div><div class="card-title">Pool 模式特殊处理</div><div class="card-sub">透明化暂停/恢复</div></div>
+      </div>
+      <div class="card-body"><ul>
+        <li><strong>Pause</strong>: sourcePodTemplateForPause() 从 Pod 提取模板 → 删 Pool 标签 → 写回 spec.template → 清 poolRef → Pool GC 回收旧 Pod</li>
+        <li><strong>Resume</strong>: continueResume() 清 poolRef + 移除 finalizer → 作为普通 Pod 重建</li>
+        <li>Pause 后脱离 Pool，Resume 后独立运行</li>
+      </ul></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon purple">🔗</div>
+        <div><div class="card-title">OwnerRef 级联</div><div class="card-sub">资源生命周期绑定</div></div>
+      </div>
+      <div class="card-body"><ul>
+        <li><strong>BatchSandbox → SandboxSnapshot → Commit Job</strong> 三级级联</li>
+        <li>删除 BatchSandbox → 自动删 SandboxSnapshot → 自动删 Commit/Unpause Job</li>
+        <li>Finalizer 保证 Snapshot 删除前清理 Job</li>
+        <li>SandboxSnapshot 的 TTL (300s) 自动清理完成后的 Job Pod</li>
+      </ul></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon green">📊</div>
+        <div><div class="card-title">结果传递机制</div><div class="card-sub">Kubernetes Native</div></div>
+      </div>
+      <div class="card-body"><ul>
+        <li>image-committer 将结果写入 <code>/dev/termination-log</code></li>
+        <li>Controller 从 Pod Status <code>containerStatuses[].state.terminated.message</code> 读取</li>
+        <li>JSON 格式含 per-container name/image/digest</li>
+        <li>无额外通信通道，纯 K8s 原语</li>
+      </ul></div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ════════════════ ERROR HANDLING ════════════════ -->
+<div class="container">
+<div class="section" style="padding-top:0;">
+  <div class="section-label">Error Handling</div>
+  <div class="section-header">
+    <h2>⚠️ 错误处理矩阵</h2>
+    <p>各种异常场景的恢复策略</p>
+  </div>
+
+  <div class="table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+  <table class="info-table">
+    <thead>
+      <tr><th>场景</th><th>检测方式</th><th>处理</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Commit Job 执行失败</td><td>Job.Status.Failed</td><td>Snapshot → Failed · best-effort unpause Job · BatchSandbox 可重试</td></tr>
+      <tr><td>Commit Job 超时 (10min)</td><td>ActiveDeadlineSeconds</td><td>Job 被 K8s 终止 · Snapshot → Failed · unpause 容器</td></tr>
+      <tr><td>Snapshot 不存在时 Resume</td><td>IsNotFound</td><td>检查是否有 Ready Pod → 有则正常继续(幂等) · 无则回滚 Paused</td></tr>
+      <tr><td>Snapshot 仍在 Committing 时 Resume</td><td>phase != Succeed</td><td>回滚 Paused + ResumeFailed 条件 · 用户可重试</td></tr>
+      <tr><td>Commit Job Pod 丢失</td><td>IsNotFound</td><td>handleCommitting → 重新 handlePending 创建新 Job</td></tr>
+      <tr><td>暂停期间 Pod 被删</td><td>findPodForSandbox 失败</td><td>Snapshot → Failed · BatchSandbox → Failed + PauseFailed</td></tr>
+      <tr><td>信号中断 (SIGINT/SIGTERM)</td><td>signal.Notify</td><td>resumeAllPausedContainers() → os.Exit(1)</td></tr>
+      <tr><td>Panic 崩溃</td><td>defer + recover</td><td>resumeAllPausedContainers() → re-panic</td></tr>
+      <tr><td>Registry push 认证失败</td><td>nerdctl login 返回 error</td><td>WARNING → 仍尝试 push (支持预认证 registry)</td></tr>
+      <tr><td>Snapshot 终态重入</td><td>terminal phase check</td><td>updateSnapshotStatus 拒绝覆盖终态 (Succeed/Failed)</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div></div>
+
+<footer class="footer">
+  <p>OpenSandbox — <a href="https://github.com/alibaba/OpenSandbox" target="_blank">github.com/alibaba/OpenSandbox</a></p>
+  <p style="margin-top:8px;">OSEP-0008 · Pause and Resume via Rootfs Snapshot</p>
+</footer>
+
+</body>
+</html>

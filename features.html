@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenSandbox — 特性清单</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1a1a24;
+    --border: #25253a;
+    --text: #e1e1ef;
+    --text2: #9494b8;
+    --accent: #6c5ce7;
+    --accent2: #a29bfe;
+    --green: #00d2a0;
+    --blue: #54a0ff;
+    --orange: #ff9f43;
+    --pink: #ff6b81;
+    --red: #ee5a6f;
+    --yellow: #feca57;
+    --cyan: #00d2d3;
+    --gradient1: linear-gradient(135deg, #6c5ce7, #a29bfe);
+    --gradient2: linear-gradient(135deg, #00d2a0, #54a0ff);
+    --gradient3: linear-gradient(135deg, #ff9f43, #ff6b81);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+  /* ── Hero ── */
+  .hero {
+    position: relative;
+    padding: 100px 24px 80px;
+    text-align: center;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(108,92,231,0.25), transparent 70%),
+                radial-gradient(ellipse 60% 50% at 20% 80%, rgba(0,210,160,0.12), transparent 60%),
+                radial-gradient(ellipse 50% 40% at 80% 70%, rgba(84,160,255,0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .hero-content { position:relative; z-index:1; max-width:900px; margin:0 auto; }
+  .hero-badge {
+    display:inline-flex; align-items:center; gap:8px;
+    padding:6px 16px; border-radius:99px; font-size:13px; font-weight:600;
+    background:rgba(108,92,231,0.15); color:var(--accent2);
+    border:1px solid rgba(108,92,231,0.3); margin-bottom:24px;
+  }
+  .hero-badge .dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+  .hero h1 { font-size:clamp(36px,6vw,64px); font-weight:800; letter-spacing:-1.5px; margin-bottom:16px; }
+  .hero h1 span { background:var(--gradient1); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .hero p { font-size:18px; color:var(--text2); max-width:640px; margin:0 auto 32px; }
+  .hero-stats { display:flex; justify-content:center; gap:40px; flex-wrap:wrap; margin-top:16px; }
+  .hero-stat { text-align:center; }
+  .hero-stat .num { font-size:32px; font-weight:800; background:var(--gradient1); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .hero-stat .lbl { font-size:13px; color:var(--text2); margin-top:4px; }
+
+  /* ── Layout ── */
+  .container { max-width:1280px; margin:0 auto; padding:0 24px; }
+  .section { padding:64px 0; }
+  .section-header { text-align:center; margin-bottom:48px; }
+  .section-header h2 { font-size:28px; font-weight:700; margin-bottom:8px; }
+  .section-header p { color:var(--text2); font-size:15px; }
+
+  /* ── Category Cards ── */
+  .cat-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); gap:20px; }
+  .cat-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; transition:all .25s; position:relative;
+  }
+  .cat-card:hover { border-color:rgba(108,92,231,0.5); transform:translateY(-2px); box-shadow:0 12px 40px rgba(0,0,0,0.3); }
+  .cat-card-header {
+    padding:20px 24px 16px; display:flex; align-items:center; gap:14px;
+    border-bottom:1px solid var(--border);
+  }
+  .cat-icon {
+    width:44px; height:44px; border-radius:var(--radius-sm); display:flex;
+    align-items:center; justify-content:center; font-size:22px; flex-shrink:0;
+  }
+  .cat-icon.purple { background:rgba(108,92,231,0.15); color:var(--accent2); }
+  .cat-icon.green  { background:rgba(0,210,160,0.15);  color:var(--green); }
+  .cat-icon.blue   { background:rgba(84,160,255,0.15);  color:var(--blue); }
+  .cat-icon.orange { background:rgba(255,159,67,0.15);  color:var(--orange); }
+  .cat-icon.pink   { background:rgba(255,107,129,0.15); color:var(--pink); }
+  .cat-icon.cyan   { background:rgba(0,210,211,0.15);   color:var(--cyan); }
+  .cat-icon.yellow { background:rgba(254,202,87,0.15);  color:var(--yellow); }
+  .cat-icon.red    { background:rgba(238,90,111,0.15);  color:var(--red); }
+  .cat-card-title { font-size:16px; font-weight:700; }
+  .cat-card-sub   { font-size:12px; color:var(--text2); }
+  .cat-card-body  { padding:16px 24px 20px; }
+  .cat-card-body ul { list-style:none; display:flex; flex-direction:column; gap:8px; }
+  .cat-card-body li {
+    position:relative; padding-left:20px; font-size:14px; color:var(--text2);
+  }
+  .cat-card-body li::before {
+    content:''; position:absolute; left:0; top:8px;
+    width:6px; height:6px; border-radius:50%; background:var(--accent); opacity:.6;
+  }
+  .cat-card-body li strong { color:var(--text); font-weight:600; }
+
+  /* ── Feature Badge Tags ── */
+  .tag-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .tag {
+    padding:4px 10px; border-radius:99px; font-size:11px; font-weight:600;
+    white-space:nowrap;
+  }
+  .tag.done   { background:rgba(0,210,160,0.12);  color:var(--green); }
+  .tag.wip    { background:rgba(255,159,67,0.12);  color:var(--orange); }
+  .tag.draft  { background:rgba(148,148,184,0.12); color:var(--text2); }
+  .tag.soon   { background:rgba(84,160,255,0.12);  color:var(--blue); }
+
+  /* ── OSEP Table ── */
+  .osep-table { width:100%; border-collapse:collapse; margin-top:24px; }
+  .osep-table th {
+    text-align:left; padding:14px 16px; font-size:12px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.5px; color:var(--text2);
+    border-bottom:1px solid var(--border);
+  }
+  .osep-table td { padding:14px 16px; font-size:14px; border-bottom:1px solid var(--border); }
+  .osep-table tr:hover td { background:rgba(108,92,231,0.04); }
+  .osep-table .status {
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+    padding:4px 12px; border-radius:99px;
+  }
+  .status.done   { background:rgba(0,210,160,0.12);  color:var(--green); }
+  .status.wip    { background:rgba(255,159,67,0.12);  color:var(--orange); }
+  .status.draft  { background:rgba(148,148,184,0.12); color:var(--text2); }
+  .status.prov   { background:rgba(84,160,255,0.12);  color:var(--blue); }
+  .osep-table code { background:rgba(108,92,231,0.1); color:var(--accent2); padding:2px 6px; border-radius:4px; font-size:12px; }
+
+  /* ── SDK Grid ── */
+  .sdk-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:12px; }
+  .sdk-item {
+    background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:16px; text-align:center; transition:all .2s;
+  }
+  .sdk-item:hover { border-color:var(--accent); }
+  .sdk-item .lang { font-size:18px; font-weight:700; margin-bottom:6px; }
+  .sdk-item .pkgs { font-size:11px; color:var(--text2); }
+  .sdk-item .pkgs span { display:block; }
+
+  /* ── CLI Table ── */
+  .cli-group { margin-bottom:20px; }
+  .cli-group h4 {
+    font-size:14px; font-weight:700; color:var(--accent2); margin-bottom:8px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .cli-group h4 code { background:rgba(108,92,231,0.1); padding:2px 8px; border-radius:4px; font-size:13px; color:var(--text); }
+  .cli-cmds {
+    display:flex; flex-wrap:wrap; gap:6px;
+  }
+  .cli-cmd {
+    padding:4px 12px; border-radius:99px; font-size:12px; font-family:'SF Mono','Fira Code',monospace;
+    background:var(--surface2); border:1px solid var(--border); color:var(--text2);
+    transition:all .2s;
+  }
+  .cli-cmd:hover { border-color:var(--accent); color:var(--text); }
+
+  /* ── Responsive ── */
+  @media (max-width:768px) {
+    .cat-grid { grid-template-columns:1fr; }
+    .hero-stats { gap:24px; }
+    .hero { padding:60px 16px 40px; }
+    .section { padding:40px 0; }
+    .osep-table { display:block; overflow-x:auto; }
+  }
+
+  /* ── Footer ── */
+  .footer {
+    text-align:center; padding:48px 24px; color:var(--text2); font-size:13px;
+    border-top:1px solid var(--border); margin-top:40px;
+  }
+  .footer a { color:var(--accent2); text-decoration:none; }
+  .footer a:hover { text-decoration:underline; }
+
+  /* ── Nav ── */
+  .nav {
+    position:sticky; top:0; z-index:100;
+    background:rgba(10,10,15,0.85); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--border); padding:0 24px;
+  }
+  .nav-inner { max-width:1280px; margin:0 auto; display:flex; align-items:center; height:52px; gap:24px; }
+  .nav-logo { font-weight:800; font-size:17px; letter-spacing:-.5px; white-space:nowrap; }
+  .nav-logo span { background:var(--gradient1); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .nav-links { display:flex; gap:4px; overflow-x:auto; flex:1; -ms-overflow-style:none; scrollbar-width:none; }
+  .nav-links::-webkit-scrollbar { display:none; }
+  .nav-links a {
+    font-size:12px; font-weight:600; color:var(--text2); text-decoration:none;
+    padding:6px 12px; border-radius:6px; white-space:nowrap; transition:all .2s;
+  }
+  .nav-links a:hover { color:var(--text); background:var(--surface2); }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">Open<span>Sandbox</span></div>
+    <div class="nav-links">
+      <a href="#lifecycle">生命周期</a>
+      <a href="#execd">执行引擎</a>
+      <a href="#network">网络</a>
+      <a href="#runtime">运行时</a>
+      <a href="#pool">Pool 预热</a>
+      <a href="#snapshot">快照</a>
+      <a href="#sdk">SDK</a>
+      <a href="#cli">CLI</a>
+      <a href="#mcp">MCP</a>
+      <a href="#platform">平台</a>
+      <a href="#osep">OSEP</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge"><span class="dot"></span> CNCF Landscape · v1.x · 11.6k ★</div>
+    <h1>Open<span>Sandbox</span> 特性清单</h1>
+    <p>面向 AI 应用的通用沙箱平台 — 从 Coding Agent 到 GUI Agent，从代码执行到 RL 训练，一站式安全隔离环境。</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">14</div><div class="lbl">OSEP 提案</div></div>
+      <div class="hero-stat"><div class="num">5</div><div class="lbl">语言 SDK</div></div>
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">安全运行时</div></div>
+      <div class="hero-stat"><div class="num">30+</div><div class="lbl">API 端点</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 一、沙箱生命周期 -->
+<div class="container" id="lifecycle">
+<div class="section">
+<div class="section-header">
+  <h2>🔁 沙箱生命周期管理</h2>
+  <p>完整的 CRUD + 状态机，支持暂停/恢复/续期</p>
+</div>
+<div class="cat-grid">
+
+<div class="cat-card">
+  <div class="cat-card-header">
+    <div class="cat-icon purple">📦</div>
+    <div>
+      <div class="cat-card-title">核心生命周期 API</div>
+      <div class="cat-card-sub">REST · /v1/sandboxes</div>
+    </div>
+  </div>
+  <div class="cat-card-body">
+    <ul>
+      <li><strong>创建沙箱</strong> — 镜像 + 入口命令 + 环境变量 + 资源限制 + 过期时间</li>
+      <li><strong>列出沙箱</strong> — 分页 · 状态过滤（多状态 OR）· metadata key-value 过滤</li>
+      <li><strong>获取详情</strong> — 完整沙箱信息</li>
+      <li><strong>更新元数据</strong> — JSON Merge Patch (RFC 7396)</li>
+      <li><strong>删除沙箱</strong> — 优雅终止</li>
+    </ul>
+  </div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header">
+    <div class="cat-icon green">⏯️</div>
+    <div>
+      <div class="cat-card-title">高级生命周期操作</div>
+      <div class="cat-card-sub">State Machine</div>
+    </div>
+  </div>
+  <div class="cat-card-body">
+    <ul>
+      <li><strong>暂停 Pause</strong> — 保留状态 → Pausing → Paused</li>
+      <li><strong>恢复 Resume</strong> — 还原状态 → Resuming → Running</li>
+      <li><strong>续期 Renew</strong> — 延长沙箱过期时间</li>
+      <li><strong>自动续期</strong> (OSEP-0009) — Ingress 流量触发自动续期</li>
+      <li><strong>端点解析</strong> — 获取沙箱端口的公共访问 URL</li>
+    </ul>
+    <div class="tag-row">
+      <span class="tag done">Pause</span><span class="tag done">Resume</span><span class="tag done">Auto-Renew</span>
+    </div>
+  </div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header">
+    <div class="cat-icon blue">🔄</div>
+    <div>
+      <div class="cat-card-title">沙箱状态机</div>
+      <div class="cat-card-sub">确定性状态转换</div>
+    </div>
+  </div>
+  <div class="cat-card-body">
+    <ul>
+      <li><strong>Pending</strong> — 请求已接受，正在创建</li>
+      <li><strong>Running</strong> — 正常运行，可执行操作</li>
+      <li><strong>Pausing</strong> — 正在暂停，保存状态</li>
+      <li><strong>Paused</strong> — 已暂停，Pod 已释放</li>
+      <li><strong>Resuming</strong> — 正在恢复，重建 Pod</li>
+      <li><strong>Stopping / Terminated</strong> — 终止中 / 已终止</li>
+      <li><strong>Failed</strong> — 创建或操作失败</li>
+    </ul>
+  </div>
+</div>
+
+</div></div></div>
+
+<!-- 二、执行引擎 -->
+<div class="container" id="execd">
+<div class="section">
+<div class="section-header">
+  <h2>⚡ 执行守护进程 (execd)</h2>
+  <p>Go + Gin，沙箱内 :44772 端口，SSE / WebSocket 流式通信</p>
+</div>
+<div class="cat-grid">
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon green">⌨️</div><div><div class="cat-card-title">命令执行</div><div class="cat-card-sub">SSE 流式输出</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>前台命令</strong> — SSE 实时 stdout/stderr/exit code</li>
+    <li><strong>后台命令</strong> — 异步追踪 + 日志检索</li>
+    <li><strong>中断执行</strong> — 信号转发 SIGTERM/SIGKILL</li>
+    <li><strong>Bash 会话</strong> — 持久化 Shell (create→run→delete)</li>
+    <li><strong>信号转发</strong> — 进程组 Setpgid 保证子进程全杀</li>
+  </ul></div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon purple">💻</div><div><div class="cat-card-title">交互终端 PTY</div><div class="cat-card-sub">WebSocket 双向流</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>WebSocket PTY</strong> — 双向 I/O 流式终端</li>
+    <li><strong>终端调整</strong> — resize / signal 控制消息</li>
+    <li><strong>重连支持</strong> — 1 MiB 环形回放缓冲区</li>
+    <li><strong>独占 + 抢占</strong> — 单客户端锁 + takeover 接管</li>
+    <li><strong>原子 attach+快照</strong> — 消除重连输出丢失窗口</li>
+  </ul></div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon orange">🧠</div><div><div class="cat-card-title">代码解释器</div><div class="cat-card-sub">Jupyter 内核集成</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>多语言</strong> — Python / JS / TS / Java / Go / Bash</li>
+    <li><strong>代码上下文</strong> — 持久化解释器 Context CRUD</li>
+    <li><strong>SQL 执行</strong> — SQLite 内联 SQL</li>
+    <li><strong>中断代码</strong> — 取消运行中的执行</li>
+    <li><strong>Per-execution 锁</strong> — 防止并发执行冲突</li>
+  </ul></div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon red">🔒</div><div><div class="cat-card-title">隔离执行 (OSEP-0013)</div><div class="cat-card-sub">bubblewrap · &lt;1ms 冷启动</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>Namespace 隔离</strong> — PID / mount / net / tmpfs</li>
+    <li><strong>工作区模式</strong> — rw / overlay(CoW) / ro</li>
+    <li><strong>Seccomp BPF</strong> — 自动生成系统调用过滤</li>
+    <li><strong>隔离 Profile</strong> — strict (无网络) / balanced (有网络)</li>
+    <li><strong>Diff + Commit</strong> — 查看/持久化文件系统变更</li>
+    <li><strong>完整文件代理</strong> — 隔离区文件 CRUD</li>
+  </ul></div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon blue">📁</div><div><div class="cat-card-title">文件系统操作</div><div class="cat-card-sub">完整 CRUD · REST API</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>读写</strong> — 偏移/长度/编码控制</li>
+    <li><strong>上传/下载</strong> — 流式传输</li>
+    <li><strong>删除/重命名/移动</strong></li>
+    <li><strong>权限修改</strong> — chmod mode/owner/group</li>
+    <li><strong>查找替换</strong> — 文件内容搜索替换</li>
+    <li><strong>Glob 搜索</strong> — 模式匹配文件搜索</li>
+    <li><strong>目录管理</strong> — list/make/remove (可配深度)</li>
+    <li><strong>文件元数据</strong> — size / mode / modtime</li>
+  </ul></div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon cyan">📊</div><div><div class="cat-card-title">指标与健康检查</div><div class="cat-card-sub">REST + SSE</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>GET /metrics</strong> — CPU / 内存快照 (JSON)</li>
+    <li><strong>GET /metrics/watch</strong> — SSE 每秒流式推送</li>
+    <li><strong>GET /ping</strong> — 存活探针</li>
+    <li><strong>GET /proxy/:port/*</strong> — 任意端口反向代理</li>
+    <li><strong>OpenTelemetry</strong> — 可选 OTLP 指标导出</li>
+  </ul></div>
+</div>
+
+</div></div></div>
+
+<!-- 三、网络 -->
+<div class="container" id="network">
+<div class="section">
+<div class="section-header">
+  <h2>🌐 网络能力</h2>
+  <p>完整的入站代理 + 出站控制 + 凭证保险箱</p>
+</div>
+<div class="cat-grid">
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon blue">🚪</div><div><div class="cat-card-title">Ingress 入站网关</div><div class="cat-card-sub">HTTP + WebSocket 代理</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>Wildcard DNS</strong> — *.sandbox.example.com → 沙箱端口</li>
+    <li><strong>Header 路由</strong> — X-Sandbox-Ingress 头</li>
+    <li><strong>URI 路由</strong> — /sandbox/{id}/{port}/...</li>
+    <li><strong>安全访问</strong> (OSEP-0011) — HMAC-SHA256 签名令牌 · Key 轮换 · 过期控制</li>
+    <li><strong>Renew Intent</strong> — Redis 驱动访问自动续期</li>
+    <li><strong>Server 代理隧道</strong> — 生命周期 Server 充当代理</li>
+  </ul>
+  <div class="tag-row"><span class="tag done">Wildcard</span><span class="tag done">Header</span><span class="tag done">URI</span><span class="tag done">Secure Access</span></div>
+</div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon orange">🛡️</div><div><div class="cat-card-title">Egress 出站控制</div><div class="cat-card-sub">FQDN 策略 · 透明代理</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>DNS 模式</strong> — 透明 DNS 代理 127.0.0.1:15353</li>
+    <li><strong>DNS+nft 模式</strong> — nftables IP 级动态规则</li>
+    <li><strong>iptables 重定向</strong> — 透明代理流量劫持</li>
+    <li><strong>MITM HTTPS</strong> — mitmproxy TLS 拦截</li>
+    <li><strong>运行时策略</strong> — HTTP API :18080 动态增删规则</li>
+    <li><strong>Always-on 规则</strong> — 热加载白/黑名单</li>
+    <li><strong>Webhook 通知</strong> — 拦截事件广播</li>
+  </ul>
+  <div class="tag-row"><span class="tag done">FQDN</span><span class="tag done">nftables</span><span class="tag done">MITM</span><span class="tag done">Runtime API</span></div>
+</div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon pink">🔐</div><div><div class="cat-card-title">Credential Vault (OSEP-0012)</div><div class="cat-card-sub">凭证注入 · 零暴露</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>自动注入</strong> — Bearer / Basic / API-Key 凭证</li>
+    <li><strong>FQDN 绑定</strong> — 凭证映射到目标域名</li>
+    <li><strong>原子更新</strong> — revision 冲突检测</li>
+    <li><strong>零知识</strong> — 客户端不接触密钥原文</li>
+    <li><strong>CLI 管理</strong> — osb credential-vault create/get/patch</li>
+    <li><strong>透明代理</strong> — Unix socket + TLS</li>
+  </ul>
+  <div class="tag-row"><span class="tag wip">实现中</span></div>
+</div>
+</div>
+
+</div></div></div>
+
+<!-- 四、运行时 -->
+<div class="container" id="runtime">
+<div class="section">
+<div class="section-header">
+  <h2>🐳 运行时后端</h2>
+  <p>Docker / Kubernetes / 安全容器 — 统一抽象，可插拔切换</p>
+</div>
+<div class="cat-grid">
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon blue">🐳</div><div><div class="cat-card-title">Docker 运行时</div><div class="cat-card-sub">本地开发 · 单机部署</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>网络模式</strong> — host / bridge / 自定义</li>
+    <li><strong>端口动态分配</strong></li>
+    <li><strong>Volume</strong> — named volume / bind mount / OSSFS</li>
+    <li><strong>安全加固</strong> — drop capabilities · AppArmor · Seccomp · no_new_privileges · PID limit</li>
+    <li><strong>Docker commit 快照</strong></li>
+    <li><strong>Windows 容器支持</strong></li>
+  </ul>
+</div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon purple">☸️</div><div><div class="cat-card-title">Kubernetes 运行时</div><div class="cat-card-sub">生产环境 · 声明式编排</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>3 种 CRD</strong> — BatchSandbox · Pool · SandboxSnapshot</li>
+    <li><strong>Controller 自愈</strong> — 状态收敛 · 故障恢复</li>
+    <li><strong>Workload Provider</strong> — BatchSandbox + AgentSandbox</li>
+    <li><strong>Task Executor</strong> — 进程/容器/组合任务</li>
+    <li><strong>Helm Charts</strong> — controller + server 一键部署</li>
+    <li><strong>RBAC 三级</strong> — admin / editor / viewer</li>
+    <li><strong>Prometheus</strong> — ServiceMonitor 监控</li>
+  </ul>
+</div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon green">🛡️</div><div><div class="cat-card-title">安全容器运行时 (OSEP-0004)</div><div class="cat-card-sub">硬件级隔离</div></div></div>
+  <div class="cat-card-body">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+      <thead><tr style="color:var(--text2);font-size:11px;text-transform:uppercase;"><th style="text-align:left;padding:6px 8px;">运行时</th><th style="text-align:left;padding:6px 8px;">Docker</th><th style="text-align:left;padding:6px 8px;">K8s RuntimeClass</th></tr></thead>
+      <tbody>
+        <tr style="border-top:1px solid var(--border);"><td style="padding:8px;"><strong>gVisor</strong></td><td style="padding:8px;"><code>runsc</code></td><td style="padding:8px;"><code>gvisor</code></td></tr>
+        <tr style="border-top:1px solid var(--border);"><td style="padding:8px;"><strong>Kata</strong></td><td style="padding:8px;"><code>kata-runtime</code></td><td style="padding:8px;"><code>kata-qemu</code></td></tr>
+        <tr style="border-top:1px solid var(--border);"><td style="padding:8px;"><strong>Firecracker</strong></td><td style="padding:8px;">—</td><td style="padding:8px;"><code>kata-fc</code></td></tr>
+      </tbody>
+    </table>
+    <div class="tag-row" style="margin-top:12px;"><span class="tag done">gVisor</span><span class="tag done">Kata</span><span class="tag done">Firecracker</span></div>
+  </div>
+</div>
+
+</div></div></div>
+
+<!-- 五、Pool 预热 -->
+<div class="container" id="pool">
+<div class="section">
+<div class="section-header">
+  <h2>🔥 Pool 预热机制</h2>
+  <p>预创建 Pod 池，亚秒级沙箱分配，自动扩缩容</p>
+</div>
+<div class="cat-grid">
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon orange">♨️</div><div><div class="cat-card-title">容量温度控制</div><div class="cat-card-sub">四参数自动调节</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>BufferMin / BufferMax</strong> — 空闲缓冲窗口</li>
+    <li><strong>PoolMin / PoolMax</strong> — 池绝对上下限</li>
+    <li><strong>回中策略</strong> — 缓冲超范围时回到 (min+max)/2</li>
+    <li><strong>滞回 (Hysteresis)</strong> — 避免边界震荡</li>
+    <li><strong>maxUnavailable (25%)</strong> — 扩容速率限制</li>
+    <li><strong>未就绪 Pod 计入</strong> — 防过度扩容</li>
+  </ul></div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon blue">🎯</div><div><div class="cat-card-title">多级智能选池</div><div class="cat-card-sub">Predicate + Scorer 链</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>Capacity</strong> — PoolMax - Allocated ≥ replicas</li>
+    <li><strong>Image</strong> — 镜像交集匹配</li>
+    <li><strong>LabelSelector</strong> — 自定义标签匹配 (可配)</li>
+    <li><strong>NodeSelector</strong> — 节点亲和性兼容</li>
+    <li><strong>Resource</strong> — CPU/Memory 资源充足</li>
+    <li><strong>Scorer</strong> — LeastAllocated / MostAllocated 打分</li>
+  </ul></div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon green">♻️</div><div><div class="cat-card-title">调度与回收</div><div class="cat-card-sub">注解驱动 · 三阶段事务</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>PackedSchedule</strong> — 贪心按序分配</li>
+    <li><strong>SpreadSchedule</strong> — 分散分配</li>
+    <li><strong>三阶段释放</strong> — alloc-status → alloc-release → alloc-released</li>
+    <li><strong>Recycle 策略</strong> — Delete · Restart · Noop</li>
+    <li><strong>逐出保护</strong> — 已分配 Pod 不受节点维护影响</li>
+    <li><strong>孤儿 GC</strong> — force-delete 沙箱 Pod 自动回收</li>
+    <li><strong>滚动更新</strong> — 模板变更 maxUnavailable 速率</li>
+  </ul></div>
+</div>
+
+</div></div></div>
+
+<!-- 六、快照 -->
+<div class="container" id="snapshot">
+<div class="section">
+<div class="section-header">
+  <h2>📸 快照 (Pause / Resume)</h2>
+  <p>声明式快照 — 暂停时保存 rootfs 到 OCI Registry，恢复时重建</p>
+</div>
+<div class="cat-grid">
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon purple">💾</div><div><div class="cat-card-title">快照 CRD 与状态机</div><div class="cat-card-sub">SandboxSnapshot</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>极简 spec</strong> — 仅需 sandboxName</li>
+    <li><strong>状态机</strong> — Pending → Committing → Succeed / Failed</li>
+    <li><strong>Per-Container</strong> — 多容器独立快照 + digest 记录</li>
+    <li><strong>OwnerRef 链</strong> — BatchSandbox → Snapshot → Commit Job</li>
+    <li><strong>标签生成</strong> — snap-gen{generation} (内部) / snap-{sha256} (公开)</li>
+  </ul></div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon green">🏗️</div><div><div class="cat-card-title">Image Committer</div><div class="cat-card-sub">nerdctl 六步流程</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>Step 1</strong> — 定位容器 (K8s label 过滤)</li>
+    <li><strong>Step 2</strong> — nerdctl pause (保证 FS 一致性)</li>
+    <li><strong>Step 3</strong> — nerdctl commit (rootfs → OCI)</li>
+    <li><strong>Step 4</strong> — nerdctl unpause (无论成败都恢复)</li>
+    <li><strong>Step 5</strong> — nerdctl login + push</li>
+    <li><strong>Step 6</strong> — nerdctl inspect 提取 digest</li>
+  </ul>
+  <div class="tag-row"><span class="tag done">10min 超时</span><span class="tag done">Backoff=3</span><span class="tag done">信号安全</span></div>
+</div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon orange">🔄</div><div><div class="cat-card-title">Pause/Resume 流程</div><div class="cat-card-sub">5-Case 状态调度</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>handlePause</strong> — 停止任务 → 创建 Snapshot</li>
+    <li><strong>syncPauseOrClear</strong> — 轮询快照 → completePause</li>
+    <li><strong>completePause</strong> — 删除 Pod / 脱离 Pool</li>
+    <li><strong>handleResume</strong> — ACK Resuming 阶段</li>
+    <li><strong>continueResume</strong> — 替换镜像 → 重建 Pod</li>
+    <li><strong>Retry Bridge</strong> — Server 端 nil→target 两步桥接</li>
+  </ul></div>
+</div>
+
+</div></div></div>
+
+<!-- 七、SDK -->
+<div class="container" id="sdk">
+<div class="section">
+<div class="section-header">
+  <h2>📦 多语言 SDK</h2>
+  <p>5 种语言，Sandbox + Code Interpreter + MCP 三大 SDK</p>
+</div>
+
+<div style="margin-bottom:36px;">
+  <h3 style="font-size:18px;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+    <span style="background:var(--gradient1);width:4px;height:20px;border-radius:2px;"></span>
+    Sandbox SDK
+  </h3>
+  <div class="sdk-grid">
+    <div class="sdk-item"><div class="lang">🐍 Python</div><div class="pkgs"><span>Async + Sync</span><span>PyPI: opensandbox</span></div></div>
+    <div class="sdk-item"><div class="lang">🟦 TypeScript</div><div class="pkgs"><span>npm</span><span>@alibaba-group/opensandbox</span></div></div>
+    <div class="sdk-item"><div class="lang">☕ Java/Kotlin</div><div class="pkgs"><span>Maven / Gradle</span></div></div>
+    <div class="sdk-item"><div class="lang">🔷 C#/.NET</div><div class="pkgs"><span>NuGet</span><span>Alibaba.OpenSandbox</span></div></div>
+    <div class="sdk-item"><div class="lang">🔵 Go</div><div class="pkgs"><span>Go Module</span></div></div>
+  </div>
+</div>
+
+<div style="margin-bottom:36px;">
+  <h3 style="font-size:18px;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+    <span style="background:var(--gradient2);width:4px;height:20px;border-radius:2px;"></span>
+    Code Interpreter SDK
+  </h3>
+  <div class="sdk-grid">
+    <div class="sdk-item"><div class="lang">🐍 Python</div><div class="pkgs"><span>多语言代码执行</span></div></div>
+    <div class="sdk-item"><div class="lang">🟦 TypeScript</div><div class="pkgs"><span>SSE 流式结果</span></div></div>
+    <div class="sdk-item"><div class="lang">☕ Java/Kotlin</div><div class="pkgs"><span>Context 管理</span></div></div>
+    <div class="sdk-item"><div class="lang">🔷 C#/.NET</div><div class="pkgs"><span>NuGet</span></div></div>
+  </div>
+</div>
+
+<div>
+  <h3 style="font-size:18px;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+    <span style="background:var(--gradient3);width:4px;height:20px;border-radius:2px;"></span>
+    MCP Server
+  </h3>
+  <div class="sdk-grid">
+    <div class="sdk-item"><div class="lang">🐍 Python</div><div class="pkgs"><span>14 MCP Tools</span><span>Stdio 传输</span><span>Claude Code / Cursor</span></div></div>
+  </div>
+</div>
+</div></div>
+
+<!-- 八、CLI -->
+<div class="container" id="cli">
+<div class="section">
+<div class="section-header">
+  <h2>🖥️ CLI — <code>osb</code></h2>
+  <p>Python Click + Rich，终端全功能操作</p>
+</div>
+<div class="cat-grid">
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon blue">📋</div><div><div class="cat-card-title">命令总览</div></div></div>
+  <div class="cat-card-body">
+    <div class="cli-group"><h4><code>osb sandbox</code> 生命周期</h4><div class="cli-cmds"><span class="cli-cmd">create</span><span class="cli-cmd">list</span><span class="cli-cmd">get</span><span class="cli-cmd">kill</span><span class="cli-cmd">pause</span><span class="cli-cmd">resume</span><span class="cli-cmd">renew</span><span class="cli-cmd">endpoint</span><span class="cli-cmd">metrics</span><span class="cli-cmd">health</span><span class="cli-cmd">search</span></div></div>
+    <div class="cli-group"><h4><code>osb command</code> 命令执行</h4><div class="cli-cmds"><span class="cli-cmd">run</span><span class="cli-cmd">interrupt</span><span class="cli-cmd">status</span><span class="cli-cmd">logs</span></div></div>
+    <div class="cli-group"><h4><code>osb file</code> 文件操作</h4><div class="cli-cmds"><span class="cli-cmd">cat</span><span class="cli-cmd">write</span><span class="cli-cmd">upload</span><span class="cli-cmd">download</span><span class="cli-cmd">rm</span><span class="cli-cmd">mv</span><span class="cli-cmd">mkdir</span><span class="cli-cmd">rmdir</span><span class="cli-cmd">search</span><span class="cli-cmd">info</span><span class="cli-cmd">chmod</span><span class="cli-cmd">replace</span></div></div>
+    <div class="cli-group"><h4><code>osb egress</code> 网络策略</h4><div class="cli-cmds"><span class="cli-cmd">get</span><span class="cli-cmd">patch</span></div></div>
+    <div class="cli-group"><h4><code>osb credential-vault</code></h4><div class="cli-cmds"><span class="cli-cmd">create</span><span class="cli-cmd">get</span><span class="cli-cmd">patch</span></div></div>
+    <div class="cli-group"><h4><code>osb devops</code> 运维</h4><div class="cli-cmds"><span class="cli-cmd">summary</span></div></div>
+    <div class="cli-group"><h4><code>osb diagnostics</code></h4><div class="cli-cmds"><span class="cli-cmd">logs</span><span class="cli-cmd">events</span><span class="cli-cmd">inspect</span></div></div>
+    <div class="cli-group"><h4><code>osb config</code> 配置</h4><div class="cli-cmds"><span class="cli-cmd">init</span><span class="cli-cmd">set</span><span class="cli-cmd">get</span><span class="cli-cmd">list</span><span class="cli-cmd">unset</span></div></div>
+    <div class="cli-group"><h4><code>osb skills</code> AI 技能</h4><div class="cli-cmds"><span class="cli-cmd">list</span><span class="cli-cmd">show</span><span class="cli-cmd">generate</span></div></div>
+  </div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon purple">⚙️</div><div><div class="cat-card-title">全局选项</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>--api-key</strong> — API 密钥</li>
+    <li><strong>--domain / --protocol</strong> — 服务端地址</li>
+    <li><strong>--use-server-proxy</strong> — 通过 Server 代理 execd 流量</li>
+    <li><strong>--request-timeout</strong> — 请求超时</li>
+    <li><strong>--config</strong> — 配置文件路径</li>
+    <li><strong>--verbose / --no-color</strong> — 调试选项</li>
+    <li><strong>输出格式</strong> — table / json / yaml / raw</li>
+    <li><strong>Rich 终端</strong> — 彩色美化输出</li>
+  </ul></div>
+</div>
+
+</div></div></div>
+
+<!-- 九、MCP -->
+<div class="container" id="mcp">
+<div class="section">
+<div class="section-header">
+  <h2>🤖 MCP Server</h2>
+  <p>Model Context Protocol — 让 AI 编码助手直接操控沙箱</p>
+</div>
+<div class="cat-grid">
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon pink">🔧</div><div><div class="cat-card-title">14 个 MCP Tools</div><div class="cat-card-sub">Stdio 传输 · 兼容主流 MCP 客户端</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>sandbox_create</strong> / <strong>sandbox_connect</strong> / <strong>sandbox_kill</strong></li>
+    <li><strong>sandbox_get_info</strong> / <strong>sandbox_list</strong> / <strong>sandbox_renew</strong></li>
+    <li><strong>sandbox_get_metrics</strong> / <strong>sandbox_healthcheck</strong></li>
+    <li><strong>command_run</strong> (foreground/background) / <strong>command_interrupt</strong></li>
+    <li><strong>file_read</strong> / <strong>file_write</strong> / <strong>file_delete</strong></li>
+    <li><strong>file_search</strong> / <strong>file_create_directories</strong> / <strong>file_delete_directories</strong></li>
+    <li><strong>file_move</strong> / <strong>file_replace_contents</strong></li>
+  </ul></div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon green">✨</div><div><div class="cat-card-title">集成特性</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>沙箱注册表</strong> — 追踪所有创建/连接的沙箱</li>
+    <li><strong>进度报告</strong> — MCP Context 通知</li>
+    <li><strong>自动清理</strong> — 会话结束时释放资源</li>
+    <li><strong>兼容</strong> — Claude Code · Cursor · 任意 MCP 客户端</li>
+  </ul></div>
+</div>
+
+</div></div></div>
+
+<!-- 十、平台 -->
+<div class="container" id="platform">
+<div class="section">
+<div class="section-header">
+  <h2>🏗️ 平台与运维</h2>
+  <p>配置管理 · 认证 · 可观测性 · K8s 部署</p>
+</div>
+<div class="cat-grid">
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon purple">⚙️</div><div><div class="cat-card-title">配置管理</div><div class="cat-card-sub">TOML · Pydantic · Env Override</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>TOML 配置</strong> — 完整 Pydantic 模型校验</li>
+    <li><strong>环境变量覆盖</strong> — SANDBOX_CONFIG_PATH / OPENSANDBOX_SERVER_API_KEY</li>
+    <li><strong>运行时选择</strong> — runtime.type = docker | kubernetes</li>
+    <li><strong>日志轮转</strong> — 级别 + 文件 + 大小 + 备份数</li>
+    <li><strong>独立访问日志</strong> — 与业务日志分离</li>
+    <li><strong>K8s 参数</strong> — kubeconfig / informer / QPS 限速</li>
+    <li><strong>线程池</strong> — thread_pool_size / event_loop 可配</li>
+  </ul></div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon blue">🔑</div><div><div class="cat-card-title">认证 & 多租户</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>API Key 认证</strong> — Header OPEN-SANDBOX-API-KEY</li>
+    <li><strong>代理路径免认证</strong> — 最终用户无需服务端密钥</li>
+    <li><strong>X-Request-ID 追踪</strong> — 全链路请求 ID</li>
+    <li><strong>多租户</strong> (OSEP-0014 Draft) — per-tenant Key → K8s Namespace</li>
+    <li><strong>Hot-reload tenants.toml</strong></li>
+  </ul>
+  <div class="tag-row"><span class="tag draft">Draft</span><span class="tag done">API Key</span></div>
+</div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon cyan">📡</div><div><div class="cat-card-title">可观测性</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>OpenTelemetry</strong> (OSEP-0010) — Metrics + Logs OTLP 导出</li>
+    <li><strong>Host Metrics</strong> — CPU / Memory / /proc 统计</li>
+    <li><strong>HTTP Metrics Middleware</strong> — 自动埋点</li>
+    <li><strong>结构化日志</strong> — zap (Go) / Python logging</li>
+    <li><strong>Prometheus</strong> — ServiceMonitor + metrics endpoint</li>
+  </ul>
+</div>
+</div>
+
+<div class="cat-card">
+  <div class="cat-card-header"><div class="cat-icon green">☸️</div><div><div class="cat-card-title">K8s 部署</div></div></div>
+  <div class="cat-card-body"><ul>
+    <li><strong>Helm Charts</strong> — opensandbox-controller + opensandbox-server</li>
+    <li><strong>Leader Election</strong> — Controller HA</li>
+    <li><strong>Network Policies</strong> — 允许 metrics 流量</li>
+    <li><strong>RBAC</strong> — CRD 级别 admin/editor/viewer</li>
+    <li><strong>Prometheus ServiceMonitor</strong></li>
+    <li><strong>Windows 容器支持</strong></li>
+  </ul></div>
+</div>
+
+</div></div></div>
+
+<!-- OSEP Table -->
+<div class="container" id="osep">
+<div class="section">
+<div class="section-header">
+  <h2>📋 OSEP 提案状态</h2>
+  <p>OpenSandbox Enhancement Proposals — 已实现 / 实现中 / 草案</p>
+</div>
+<div style="overflow-x:auto;">
+<table class="osep-table">
+<thead>
+  <tr><th>编号</th><th>标题</th><th>状态</th></tr>
+</thead>
+<tbody>
+  <tr><td><code>0001</code></td><td>FQDN-based Egress Control</td><td><span class="status done">✅ 已实现</span></td></tr>
+  <tr><td><code>0002</code></td><td>kubernetes-sigs/agent-sandbox Support</td><td><span class="status done">✅ 已实现</span></td></tr>
+  <tr><td><code>0003</code></td><td>Volume and VolumeBinding Support</td><td><span class="status wip">🔄 实现中</span></td></tr>
+  <tr><td><code>0004</code></td><td>Pluggable Secure Container Runtime</td><td><span class="status done">✅ 已实现</span></td></tr>
+  <tr><td><code>0005</code></td><td>Client-Side Sandbox Pool</td><td><span class="status wip">🔄 实现中</span></td></tr>
+  <tr><td><code>0006</code></td><td>Developer Console</td><td><span class="status prov">📋 可实施</span></td></tr>
+  <tr><td><code>0007</code></td><td>Fast Sandbox Runtime Support</td><td><span class="status prov">📋 暂定</span></td></tr>
+  <tr><td><code>0008</code></td><td>Pause and Resume via Rootfs Snapshot</td><td><span class="status wip">🔄 实现中</span></td></tr>
+  <tr><td><code>0009</code></td><td>Auto-Renew Sandbox on Ingress Access</td><td><span class="status done">✅ 已实现</span></td></tr>
+  <tr><td><code>0010</code></td><td>OpenTelemetry Instrumentation</td><td><span class="status wip">🔄 实现中</span></td></tr>
+  <tr><td><code>0011</code></td><td>Secure Access Endpoint</td><td><span class="status done">✅ 已实现</span></td></tr>
+  <tr><td><code>0012</code></td><td>Credential Vault</td><td><span class="status wip">🔄 实现中</span></td></tr>
+  <tr><td><code>0013</code></td><td>Isolated Execution API</td><td><span class="status wip">🔄 实现中</span></td></tr>
+  <tr><td><code>0014</code></td><td>Multi-Tenancy</td><td><span class="status draft">📝 草案</span></td></tr>
+</tbody>
+</table>
+</div>
+</div></div>
+
+<!-- Footer -->
+<footer class="footer">
+  <p>OpenSandbox — <a href="https://github.com/alibaba/OpenSandbox" target="_blank">github.com/alibaba/OpenSandbox</a></p>
+  <p style="margin-top:8px;">CNCF Landscape · Apache 2.0 License · ~11.6k ★</p>
+</footer>
+
+</body>
+</html>
