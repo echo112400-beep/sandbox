@@ -1,0 +1,37 @@
+模块分层,一级特性,二级细分特性,优先级,是否已实现,特性状态,代码验证结果,证据摘要
+接入SDK & Agent对接层,多语言SDK封装,Python SDK基础封装,P0,是,已上线,✅ VERIFIED,sdks/sandbox/python/pyproject.toml - package opensandbox; __init__.py exports Sandbox/SandboxManager
+接入SDK & Agent对接层,多语言SDK封装,TypeScript SDK基础封装,P0,是,已上线,✅ VERIFIED,sdks/sandbox/javascript/package.json - @alibaba-group/opensandbox v0.1.9
+接入SDK & Agent对接层,LLM业务适配,CodeInterpreter调用封装,P0,是,已上线,✅ VERIFIED,sdks/code-interpreter/python/src/code_interpreter/__init__.py; sdks/code-interpreter/javascript/src/index.ts
+接入SDK & Agent对接层,LLM业务适配,Browser网页工具封装,P0,是,已上线,⚠️ PARTIAL,examples/chrome/ examples/playwright/ 存在但无独立SDK包; 非sdks/下的可安装封装
+接入SDK & Agent对接层,会话管理,沙箱生命周期API封装,P0,是,已上线,✅ VERIFIED,sdks/sandbox/python/src/opensandbox/sandbox.py - create/connect/kill/pause/resume
+接入SDK & Agent对接层,租户鉴权封装,API Key全局鉴权,P0,是,已上线,✅ VERIFIED,server/opensandbox_server/middleware/auth.py:34 - AuthMiddleware validates OPEN-SANDBOX-API-KEY
+OpenAPI Spec 标准化协议层,沙箱生命周期标准协议,基础生命周期OpenAPI规范,P0,是,已上线,✅ VERIFIED,specs/sandbox-lifecycle.yml - OpenAPI 3.1.0 完整沙箱生命周期规范
+OpenAPI Spec 标准化协议层,沙箱内执行标准协议,基础执行API规范,P0,是,已上线,✅ VERIFIED,specs/execd-api.yaml - OpenAPI 3.1.0 execd执行API规范
+OpenAPI Spec 标准化协议层,审计日志标准字段,基础操作日志Schema,P1,是,已上线,❌ NOT FOUND,无结构化审计日志Schema; 仅logging.info()非结构化日志; OSEP-0006 Phase2规划中
+OpenAPI Spec 标准化协议层,MCP协议适配层,基础MCP协议桥接,P2,是,已上线,✅ VERIFIED,sdks/mcp/sandbox/python/src/opensandbox_mcp/server.py - FastMCP server
+Runtime 控制平面,弹性调度引擎,基础单机调度器,P0,是,已上线,✅ VERIFIED,server/opensandbox_server/services/docker/docker_service.py (57KB) - Docker调度
+Runtime 控制平面,弹性调度引擎,K8s分布式调度器,P0,是,已上线,✅ VERIFIED,server/opensandbox_server/services/k8s/kubernetes_service.py (62KB) + batchsandbox_provider.py
+Runtime 控制平面,预热池管理器,基础镜像预热池,P0,是,已上线,✅ VERIFIED,kubernetes/internal/controller/pool_controller.go - Pool CRD controller
+Runtime 控制平面,多租户RBAC权限,基础租户隔离,P0,是,已上线,❌ NOT FOUND,OSEP-0014提案设计但tenants.toml/TenantProvider代码未实现; 仅API Key全局认证
+Runtime 控制平面,资源配额引擎,基础Cgroup资源限制,P0,是,已上线,✅ VERIFIED,container_ops.py:362-371 - mem_limit/nano_cpus/pids_limit; create_helpers.py resource_limits
+Runtime 控制平面,网关流量管控,基础Ingress网关,P0,是,已上线,✅ VERIFIED,components/ingress/main.go - proxy/sandbox/signature/renewintent packages
+Runtime 控制平面,网关流量管控,Egress网络拦截,P0,是,已上线,✅ VERIFIED,components/egress/main.go - policy/dnsproxy/iptables/nftables/mitmproxy
+Runtime 控制平面,会话元数据中心,Redis会话基础存储,P0,是,已上线,✅ VERIFIED,integrations/renew_intent/redis_client.py - Redis用于renew-intent队列
+Runtime 控制平面,全链路审计,基础操作日志,P1,是,已上线,✅ VERIFIED,server/opensandbox_server/logging_config.py:125 - RotatingFileHandler结构化日志
+Sandbox 预热缓冲池 Pool,基础预热池管理,单池基础调度,P0,是,已上线,✅ VERIFIED,kubernetes/internal/controller/allocator.go + pool_controller.go
+Sandbox 预热缓冲池 Pool,冷/热切换逻辑,优先分配预热实例,P0,是,已上线,❌ NOT FOUND,无显式cold/hot pool分类或降级逻辑; 仅有BufferMin/Max水位
+Sandbox 预热缓冲池 Pool,水位弹性策略,基础扩缩容阈值,P1,是,已上线,✅ VERIFIED,pool_controller.go:735-736 - BufferMin/BufferMax + scalePool midpoint
+数据平面多类型隔离沙箱,CodeInterpreter代码沙箱,基础代码执行环境,P0,是,已上线,✅ VERIFIED,sandboxes/code-interpreter/Dockerfile + Dockerfile_base + Jupyter config
+数据平面多类型隔离沙箱,CodeInterpreter代码沙箱,execd执行守护进程,P0,是,已上线,✅ VERIFIED,components/execd/main.go - Gin HTTP server with Jupyter/PTY/runtime
+数据平面多类型隔离沙箱,Browser网页自动化沙箱,基础Chrome/Playwright环境,P0,是,已上线,✅ VERIFIED,examples/chrome/Dockerfile examples/playwright/Dockerfile - Chromium+Playwright
+数据平面多类型隔离沙箱,Computer Use桌面GUI沙箱,基础VNC桌面环境,P1,是,已上线,✅ VERIFIED,examples/desktop/Dockerfile - xvfb+x11vnc+novnc+fluxbox
+数据平面多类型隔离沙箱,公共数据面能力,Egress Sidecar基础网络代理,P0,是,已上线,✅ VERIFIED,components/egress/main.go - dnsproxy/mitmproxy/nftables/iptables
+数据平面多类型隔离沙箱,公共数据面能力,文件系统隔离,P0,是,已上线,✅ VERIFIED,components/execd/pkg/isolation/isolator.go - bubblewrap namespace隔离
+底层安全隔离底座,容器基础隔离,Linux Namespace隔离,P0,是,已上线,✅ VERIFIED,docker_service.py:949-1008 + container_ops.py:348-357 - security_opt
+底层安全隔离底座,容器基础隔离,Cgroup资源限制,P0,是,已上线,✅ VERIFIED,create_helpers.py:91-97 + batchsandbox_provider.py:158-210 - resource limits
+底层安全隔离底座,强隔离微VM底座,Kata Containers适配,P1,是,已上线,✅ VERIFIED,runtime_resolver.py:53-59 - kata→kata-runtime(Docker)/kata-qemu(K8s)
+底层安全隔离底座,系统调用安全策略,基础Seccomp/AppArmor配置,P0,是,已上线,✅ VERIFIED,config.py:830-843 + container_ops.py:348-357 + execd seccomp_gen.go
+底层安全隔离底座,可观测体系,基础Prometheus指标,P1,是,已上线,✅ VERIFIED,kubernetes/config/prometheus/monitor.yaml + cmd/controller/main.go metrics server
+底层安全隔离底座,可观测体系,Grafana监控大盘,P1,是,已上线,❌ NOT FOUND,无Grafana dashboard JSON; Prometheus ServiceMonitor存在但无面板
+底层安全隔离底座,日志持久化,基础日志采集,P1,是,已上线,❌ NOT FOUND,仅有Python RotatingFileHandler; 无ELK/fluentd集中式日志采集
+底层安全隔离底座,K8s集群部署底座,基础Helm Chart,P0,是,已上线,✅ VERIFIED,kubernetes/charts/ - opensandbox/opensandbox-controller/opensandbox-server
