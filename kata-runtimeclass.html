@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenSandbox — K8s RuntimeClass 支持 Kata Containers</title>
+<style>
+  :root {
+    --bg: #07070d; --surface: #111118; --surface2: #181825; --border: #252540;
+    --text: #e8e8f4; --text2: #8e8eb8; --accent: #5ea0ff; --accent2: #7ec0ff;
+    --green: #00e0a0; --blue: #5ea0ff; --orange: #ffa050;
+    --pink: #ff6b8a; --red: #f06070; --yellow: #fed040; --purple: #a78bfa; --cyan: #00d8d8;
+    --radius: 14px; --radius-sm: 8px; --shadow: 0 12px 48px rgba(0,0,0,0.35);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif; background:var(--bg); color:var(--text); line-height:1.7; overflow-x:hidden; }
+
+  .hero {
+    position:relative; padding:100px 24px 80px; text-align:center; overflow:hidden; border-bottom:1px solid var(--border);
+  }
+  .hero::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(94,160,255,0.22), transparent 70%),
+                radial-gradient(ellipse 50% 45% at 25% 85%, rgba(0,224,160,0.10), transparent 60%),
+                radial-gradient(ellipse 40% 35% at 80% 75%, rgba(167,139,250,0.12), transparent 60%);
+  }
+  .hero-content { position:relative; z-index:1; max-width:800px; margin:0 auto; }
+  .hero-badge {
+    display:inline-flex; align-items:center; gap:8px; padding:6px 16px; border-radius:99px;
+    font-size:13px; font-weight:600; background:rgba(94,160,255,0.14); color:var(--accent2);
+    border:1px solid rgba(94,160,255,0.3); margin-bottom:20px;
+  }
+  .hero h1 { font-size:clamp(30px,5vw,52px); font-weight:800; letter-spacing:-1.5px; margin-bottom:12px; }
+  .hero h1 span { background:linear-gradient(135deg,var(--accent),var(--green),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .hero p { font-size:17px; color:var(--text2); max-width:600px; margin:0 auto 24px; }
+  .hero-stats { display:flex; justify-content:center; gap:40px; flex-wrap:wrap; }
+  .hero-stat { text-align:center; }
+  .hero-stat .num { font-size:28px; font-weight:800; color:var(--accent2); }
+  .hero-stat .lbl { font-size:12px; color:var(--text2); margin-top:2px; }
+
+  .container { max-width:1080px; margin:0 auto; padding:0 24px; }
+  .section { padding:60px 0; }
+  .section-label {
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+    text-transform:uppercase; letter-spacing:1px; color:var(--accent2); margin-bottom:8px;
+  }
+  .section-label::before { content:''; width:4px; height:4px; border-radius:50%; background:var(--accent); }
+  .section-header { margin-bottom:36px; }
+  .section-header h2 { font-size:26px; font-weight:700; margin-bottom:6px; }
+  .section-header p { color:var(--text2); font-size:14px; }
+
+  .grid-2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:20px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px; }
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; transition:all .25s;
+  }
+  .card:hover { border-color:rgba(94,160,255,0.4); transform:translateY(-2px); box-shadow:var(--shadow); }
+  .card-header { padding:20px 24px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--border); }
+  .card-icon { width:40px; height:40px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .card-icon.blue { background:rgba(94,160,255,0.15); color:var(--accent2); }
+  .card-icon.green { background:rgba(0,224,160,0.15); color:var(--green); }
+  .card-icon.orange { background:rgba(255,160,80,0.15); color:var(--orange); }
+  .card-icon.purple { background:rgba(167,139,250,0.15); color:var(--purple); }
+  .card-icon.pink { background:rgba(255,107,138,0.15); color:var(--pink); }
+  .card-title { font-size:15px; font-weight:700; }
+  .card-sub { font-size:12px; color:var(--text2); }
+  .card-body { padding:16px 24px 20px; }
+  .card-body ul { list-style:none; display:flex; flex-direction:column; gap:6px; }
+  .card-body li { position:relative; padding-left:18px; font-size:13px; color:var(--text2); }
+  .card-body li::before { content:''; position:absolute; left:0; top:7px; width:5px; height:5px; border-radius:50%; background:var(--accent); opacity:.5; }
+  .card-body li strong { color:var(--text); font-weight:600; }
+  .card-body p { font-size:13px; color:var(--text2); }
+
+  .table-wrap { overflow-x:auto; }
+  .info-table { width:100%; border-collapse:collapse; min-width:500px; }
+  .info-table th { text-align:left; padding:10px 14px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text2); border-bottom:1px solid var(--border); }
+  .info-table td { padding:10px 14px; font-size:13px; border-bottom:1px solid var(--border); }
+  .info-table tr:last-child td { border-bottom:none; }
+  .info-table tr:hover td { background:rgba(94,160,255,0.04); }
+  .info-table td:first-child { font-weight:600; color:var(--text); white-space:nowrap; }
+  .info-table code { background:rgba(94,160,255,0.1); color:var(--accent2); padding:2px 6px; border-radius:4px; font-size:12px; }
+
+  .code-block {
+    background:rgba(0,0,0,0.35); border:1px solid var(--border); border-radius:var(--radius-sm);
+    overflow-x:auto; position:relative;
+  }
+  .code-block .lang-tag {
+    position:absolute; top:8px; right:12px; font-size:10px; font-weight:700; color:var(--text2);
+    text-transform:uppercase; letter-spacing:.5px;
+  }
+  .code-block pre { font-family:'SF Mono','Fira Code',monospace; font-size:12.5px; line-height:1.75; color:var(--text); padding:16px 20px; margin:0; }
+  .code-block .kw { color:var(--pink); }
+  .code-block .str { color:var(--green); }
+  .code-block .cmt { color:var(--text2); }
+  .code-block .fn { color:var(--blue); }
+  .code-block .cls { color:var(--accent2); }
+  .code-block .num { color:var(--orange); }
+
+  .note {
+    padding:12px 16px; border-radius:var(--radius-sm); margin:16px 0; font-size:13px; border-left:3px solid;
+  }
+  .note.info { background:rgba(94,160,255,0.06); border-color:var(--blue); color:var(--text2); }
+  .note.tip { background:rgba(0,224,160,0.06); border-color:var(--green); color:var(--text2); }
+  .note.warn { background:rgba(255,160,80,0.06); border-color:var(--orange); color:var(--text2); }
+  .note strong { color:var(--text); }
+
+  .tag { display:inline-flex; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:700; }
+  .tag.ok { background:rgba(0,224,160,0.12); color:var(--green); }
+  .tag.warn { background:rgba(255,160,80,0.12); color:var(--orange); }
+  .tag.info { background:rgba(94,160,255,0.12); color:var(--blue); }
+
+  .flow-h { display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:center; margin:16px 0; }
+  .flow-box {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:12px 16px; text-align:center; min-width:110px; transition:all .2s; font-size:12px;
+  }
+  .flow-box:hover { border-color:var(--accent); }
+  .flow-box b { display:block; font-size:13px; margin-bottom:2px; }
+  .flow-box span { font-size:10px; color:var(--text2); }
+  .flow-arr { color:var(--text2); font-size:15px; flex-shrink:0; }
+
+  .step-list { counter-reset:step; display:flex; flex-direction:column; gap:14px; }
+  .step-item {
+    position:relative; padding-left:44px; min-height:32px;
+  }
+  .step-item::before {
+    counter-increment:step; content:counter(step);
+    position:absolute; left:0; top:0; width:26px; height:26px;
+    border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:800; background:rgba(94,160,255,0.15); color:var(--accent2);
+  }
+  .step-item h4 { font-size:14px; font-weight:700; margin-bottom:2px; }
+  .step-item p { font-size:13px; color:var(--text2); }
+
+  .dep-tree {
+    font-family:'SF Mono','Fira Code',monospace; font-size:12px; line-height:1.9;
+    color:var(--text); background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:20px 24px; overflow-x:auto; white-space:pre;
+  }
+
+  .nav {
+    position:sticky; top:0; z-index:100;
+    background:rgba(7,7,13,0.85); backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--border); padding:0 24px;
+  }
+  .nav-inner { max-width:1080px; margin:0 auto; display:flex; align-items:center; height:52px; gap:20px; }
+  .nav-logo { font-weight:800; font-size:17px; letter-spacing:-.5px; white-space:nowrap; }
+  .nav-logo span { background:linear-gradient(135deg,var(--accent),var(--green)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .nav-links { display:flex; gap:2px; overflow-x:auto; flex:1; }
+  .nav-links::-webkit-scrollbar { display:none; }
+  .nav-links a { font-size:12px; font-weight:600; color:var(--text2); text-decoration:none; padding:6px 10px; border-radius:6px; white-space:nowrap; transition:all .2s; }
+  .nav-links a:hover { color:var(--text); background:var(--surface2); }
+
+  .diagram-box {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:24px 28px; overflow-x:auto;
+  }
+
+  @media (max-width:768px) {
+    .grid-2,.grid-3 { grid-template-columns:1fr; }
+    .flow-h { flex-direction:column; }
+    .flow-arr { transform:rotate(90deg); }
+    .hero { padding:60px 16px 48px; }
+  }
+  .footer { text-align:center; padding:48px 24px; color:var(--text2); font-size:13px; border-top:1px solid var(--border); margin-top:40px; }
+  .footer a { color:var(--accent2); text-decoration:none; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">Open<span>Sandbox</span></div>
+    <div class="nav-links">
+      <a href="#overview">概览</a><a href="#config">配置层</a><a href="#startup">启动校验</a>
+      <a href="#resolver">运行时解析</a><a href="#injection">Pod 注入</a><a href="#validation">校验层</a>
+      <a href="#e2e">端到端流程</a><a href="#design">设计决策</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">☸️ K8s RuntimeClass · Kata Containers · Firecracker</div>
+    <h1>RuntimeClass <span>支持</span> Kata</h1>
+    <p>从 TOML 配置到 K8s Pod 创建，分析 OpenSandbox 如何通过 RuntimeClass 支持 Kata Containers、gVisor 和 Firecracker 三种安全容器运行时。</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">5</div><div class="lbl">架构层</div></div>
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">安全运行时</div></div>
+      <div class="hero-stat"><div class="num">9</div><div class="lbl">校验点</div></div>
+      <div class="hero-stat"><div class="num">13</div><div class="lbl">Pod 构建步骤</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ OVERVIEW ═══════ -->
+<div class="container" id="overview">
+<div class="section">
+<div class="section-label">Overview</div>
+<div class="section-header"><h2>🧬 五层架构全景</h2><p>Kata 支持通过运维级配置实现，用户请求不感知安全运行时</p></div>
+
+<div class="flow-h">
+  <div class="flow-box"><b>① 配置层</b><span>config.py</span></div><div class="flow-arr">→</div>
+  <div class="flow-box"><b>② 启动层</b><span>main.py</span></div><div class="flow-arr">→</div>
+  <div class="flow-box"><b>③ 解析层</b><span>runtime_resolver</span></div><div class="flow-arr">→</div>
+  <div class="flow-box"><b>④ Pod 创建</b><span>batchsandbox_provider</span></div><div class="flow-arr">→</div>
+  <div class="flow-box" style="border-color:var(--accent);"><b>⑤ K8s 集群</b><span>RuntimeClass → Pod</span></div>
+</div>
+
+<div class="grid-3" style="margin-top:24px;">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">🐳</div><div><div class="card-title">gVisor</div><div class="card-sub">用户态内核 · 系统调用拦截</div></div></div>
+    <div class="card-body"><ul>
+      <li>Docker: <code>--runtime runsc</code></li>
+      <li>K8s: <code>RuntimeClass: gvisor</code></li>
+      <li>❌ 不兼容 egress (无 iptables NAT)</li>
+    </ul></div>
+  </div>
+  <div class="card" style="border-color:rgba(94,160,255,0.5);">
+    <div class="card-header"><div class="card-icon green">🛡️</div><div><div class="card-title">Kata Containers</div><div class="card-sub">轻量级虚拟机 · 硬件隔离</div></div></div>
+    <div class="card-body"><ul>
+      <li>Docker: <code>--runtime kata-runtime</code></li>
+      <li>K8s: <code>RuntimeClass: kata-qemu</code></li>
+      <li>✅ 兼容 egress (完整 iptables NAT)</li>
+    </ul></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon purple">🔥</div><div><div class="card-title">Firecracker</div><div class="card-sub">microVM · 极速启动</div></div></div>
+    <div class="card-body"><ul>
+      <li>仅 K8s: <code>RuntimeClass: kata-fc</code></li>
+      <li>Docker 不支持</li>
+      <li>✅ 兼容 egress</li>
+    </ul></div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ CONFIG ═══════ -->
+<div class="container" id="config">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Layer 1 — Configuration</div>
+<div class="section-header"><h2>⚙️ 配置层: SecureRuntimeConfig</h2><p>TOML 中定义安全运行时，Pydantic 模型自动交叉校验</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">📋</div><div><div class="card-title">模型定义</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Python — config.py</span>
+        <pre><span class="kw">class</span> <span class="cls">SecureRuntimeConfig</span>(BaseModel):
+    type: Literal[<span class="str">""</span>, <span class="str">"gvisor"</span>, <span class="str">"kata"</span>, <span class="str">"firecracker"</span>] = <span class="str">""</span>
+    docker_runtime: Optional[str] = None      <span class="cmt"># e.g. "kata-runtime"</span>
+    k8s_runtime_class: Optional[str] = None    <span class="cmt"># e.g. "kata-qemu", "kata-fc"</span></pre>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">✅</div><div><div class="card-title">跨字段校验规则</div></div></div>
+    <div class="card-body">
+      <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+      <table class="info-table">
+        <thead><tr><th>type</th><th>Docker</th><th>K8s</th><th>约束</th></tr></thead>
+        <tbody>
+          <tr><td><code>""</code></td><td>必须 None</td><td>必须 None</td><td>完全禁用</td></tr>
+          <tr><td><code>"kata"</code></td><td>至少一个</td><td>至少一个</td><td>Docker+K8s 双后端支持</td></tr>
+          <tr><td><code>"firecracker"</code></td><td>忽略</td><td><strong>必填</strong></td><td>仅 K8s + AppConfig 级校验拦截 Docker</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="code-block" style="margin-top:16px;">
+  <span class="lang-tag">TOML — ~/.sandbox.toml</span>
+  <pre><span class="cmt"># AKS 上的 Kata 配置</span>
+<span class="kw">[runtime]</span>
+<span class="kw">type</span> = <span class="str">"kubernetes"</span>
+
+<span class="kw">[secure_runtime]</span>
+<span class="kw">type</span> = <span class="str">"kata"</span>
+<span class="kw">k8s_runtime_class</span> = <span class="str">"kata-vm-isolation"</span>   <span class="cmt"># 可任意 RuntimeClass 名称</span></pre>
+</div>
+</div></div>
+
+<!-- ═══════ STARTUP ═══════ -->
+<div class="container" id="startup">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Layer 2 — Startup Validation</div>
+<div class="section-header"><h2>🚀 启动校验: Fail-Fast</h2><p>服务启动时验证 RuntimeClass 存在，而非等请求时才报错</p></div>
+
+<div class="code-block">
+  <span class="lang-tag">Python — runtime_resolver.py</span>
+  <pre><span class="kw">async def</span> <span class="fn">validate_secure_runtime_on_startup</span>(config, k8s_client):
+    <span class="kw">if</span> config.secure_runtime.type == <span class="str">""</span>:
+        <span class="kw">return</span>  <span class="cmt"># 未启用 → 跳过</span>
+
+    <span class="cmt"># K8s: 调用 API 验证 RuntimeClass 存在</span>
+    runtime_class = resolver.get_k8s_runtime_class()  <span class="cmt"># → "kata-vm-isolation"</span>
+    k8s_client.read_runtime_class(runtime_class)
+
+    <span class="cmt"># 404 → ValueError("Configured Kubernetes RuntimeClass 'kata-vm-isolation' does not exist.")</span>
+    <span class="cmt">#     → 服务启动失败 (fail-fast)</span>
+    <span class="cmt"># 200 → log: "Kubernetes RuntimeClass 'kata-vm-isolation' is available."</span></pre>
+</div>
+</div></div>
+
+<!-- ═══════ RESOLVER ═══════ -->
+<div class="container" id="resolver">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Layer 3 — Runtime Resolution</div>
+<div class="section-header"><h2>🔀 运行时解析层: SecureRuntimeResolver</h2><p>运维配置 → 后端运行时参数的映射器</p></div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">🗺️</div><div><div class="card-title">默认映射表</div></div></div>
+    <div class="card-body">
+      <div class="table-wrap" style="background:var(--surface2);border-radius:var(--radius-sm);overflow:hidden;">
+      <table class="info-table">
+        <thead><tr><th>type</th><th>Docker --runtime</th><th>K8s RuntimeClass</th></tr></thead>
+        <tbody>
+          <tr><td><code>"gvisor"</code></td><td><code>runsc</code></td><td><code>gvisor</code></td></tr>
+          <tr><td><code>"kata"</code></td><td><code>kata-runtime</code></td><td><code>kata-qemu</code></td></tr>
+          <tr><td><code>"firecracker"</code></td><td>N/A</td><td><code>kata-fc</code></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">🔍</div><div><div class="card-title">解析优先级</div></div></div>
+    <div class="card-body">
+      <div class="code-block" style="margin-bottom:8px;">
+        <pre><span class="kw">def</span> <span class="fn">get_k8s_runtime_class</span>():
+    <span class="kw">if</span> type == <span class="str">""</span>:
+        <span class="kw">return</span> None                   <span class="cmt"># 不使用安全运行时</span>
+    <span class="kw">if</span> k8s_runtime_class != None:
+        <span class="kw">return</span> k8s_runtime_class        <span class="cmt"># 显式指定 → 直接使用</span>
+    <span class="kw">return</span> DEFAULTS[type]            <span class="cmt"># 未指定 → 查默认表</span></pre>
+      </div>
+      <p style="font-size:12px;color:var(--text2);">例: <code>type="kata"</code> 不指定 k8s_runtime_class → <code>"kata-qemu"</code></p>
+    </div>
+  </div>
+</div>
+
+<div class="note tip" style="margin-top:16px;">
+  <strong>💡 Provider 构造函数中一次性存储</strong>: <code>self.runtime_class = self.resolver.get_k8s_runtime_class()</code> — 后续所有 Pod 创建直接使用此值
+</div>
+</div></div>
+
+<!-- ═══════ POD INJECTION ═══════ -->
+<div class="container" id="injection">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Layer 4 — Pod Creation</div>
+<div class="section-header"><h2>🏗️ Pod 创建: runtimeClassName 注入</h2><p>13 步构建 Pod Spec，runtimeClassName 在第 6 步注入</p></div>
+
+<div class="diagram-box">
+<div class="step-list">
+  <div class="step-item"><h4>构建 initContainer — execd 二进制注入</h4><p>从 execd_image 创建 init 容器，拷贝 execd 到共享卷</p></div>
+  <div class="step-item"><h4>构建 mainContainer — 用户 image/entrypoint/env/resources</h4><p>合并用户请求中的镜像、入口命令、环境变量、资源限制</p></div>
+  <div class="step-item"><h4>组装 pod_spec = {initContainers, containers, volumes}</h4><p>基础 Pod Spec 字典</p></div>
+  <div class="step-item"><h4>应用 Windows profile (如适用)</h4><p>覆盖整个 pod_spec 为 Windows 兼容格式</p></div>
+  <div class="step-item"><h4>应用 platform nodeSelector</h4><p>Linux → <code>kubernetes.io/os: linux</code></p></div>
+  <div class="step-item" style="border-left:3px solid var(--accent);padding-left:20px;">
+    <h4>★ 注入 runtimeClassName = "kata-qemu"</h4>
+    <p><code>pod_spec["runtimeClassName"] = self.runtime_class</code> ← 仅此一行完成注入</p>
+  </div>
+  <div class="step-item"><h4>应用 imagePullSecrets</h4></div>
+  <div class="step-item"><h4>应用 egress sidecar (如有 network_policy)</h4></div>
+  <div class="step-item"><h4>应用 volumes</h4></div>
+  <div class="step-item"><h4>包装为 BatchSandbox CR spec</h4><p><code>spec.template.spec = pod_spec</code></p></div>
+  <div class="step-item"><h4>加载 template ConfigMap 并 merge_with_runtime_values()</h4></div>
+  <div class="step-item"><h4>回读 runtimeClassName → ensure_egress_runtime_compatible()</h4><p>从合并后的 spec 中读取最终值做最后校验</p></div>
+  <div class="step-item"><h4>k8s_client.create_custom_object(batchsandbox)</h4><p>创建 BatchSandbox CR → Controller reconcile → 创建 Pod</p></div>
+</div>
+</div>
+</div></div>
+
+<!-- ═══════ VALIDATION ═══════ -->
+<div class="container" id="validation">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Validation Chain</div>
+<div class="section-header"><h2>🔒 校验链: 9 个校验点</h2></div>
+
+<div class="table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+<table class="info-table">
+  <thead><tr><th style="width:40px;">#</th><th>位置</th><th>校验内容</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>config.py</code></td><td>TOML 加载: type/docker_runtime/k8s_runtime_class 交叉验证</td></tr>
+    <tr><td>2</td><td><code>config.py</code></td><td>AppConfig: Firecracker + Docker → 拒绝</td></tr>
+    <tr><td>3</td><td><code>main.py</code></td><td>启动: 创建 K8s client, 调 validate_secure_runtime_on_startup()</td></tr>
+    <tr><td>4</td><td><code>runtime_resolver.py</code></td><td>_validate_k8s_runtime_class(): k8s_client.read_runtime_class(name) → 404 fail-fast</td></tr>
+    <tr><td>5</td><td><code>runtime_resolver.py</code></td><td>_warn_gvisor_egress_incompatibility(): 仅 warn gVisor, Kata 无警告</td></tr>
+    <tr><td>6</td><td><code>batchsandbox_provider.py</code></td><td>__init__: SecureRuntimeResolver.get_k8s_runtime_class() → 存储</td></tr>
+    <tr><td>7</td><td><code>validators.py</code></td><td>ensure_egress_runtime_compatible(): gVisor + networkPolicy → 403, Kata → 通过</td></tr>
+    <tr><td>8</td><td><code>batchsandbox_provider.py</code></td><td>create_workload(): pod_spec["runtimeClassName"] = self.runtime_class</td></tr>
+    <tr><td>9</td><td><code>batchsandbox_provider.py</code></td><td>Post-merge: 回读 runtimeClassName → ensure_egress_runtime_compatible() 二次校验</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note warn" style="margin-top:16px;">
+  <strong>⚠️ 关键: Kata + Egress = 兼容</strong><br>
+  仅 <code>gVisor</code> 在黑名单中 — 缺 <code>iptables nat</code> 导致 egress sidecar DNS 重定向无法工作。<br>
+  Kata 是完整 VM，支持 iptables NAT，错误消息显式推荐用 Kata 替代 gVisor。
+</div>
+</div></div>
+
+<!-- ═══════ E2E ═══════ -->
+<div class="container" id="e2e">
+<div class="section" style="padding-top:0;">
+<div class="section-label">End-to-End Flow</div>
+<div class="section-header"><h2>🔄 端到端完整流程</h2></div>
+
+<div class="dep-tree">┌─ <b>启动阶段</b> ──────────────────────────────────────────────────────┐
+│ load_config() → SecureRuntimeConfig(type=<span class="str">"kata"</span>,                │
+│       k8s_runtime_class=<span class="str">"kata-qemu"</span>)                           │
+│                                                                   │
+│ validate_secure_runtime_on_startup()                                │
+│   → k8s_client.read_runtime_class(<span class="str">"kata-qemu"</span>) → OK           │
+│   → 404 → ValueError → 服务不启动 (fail-fast)                      │
+│                                                                   │
+│ BatchSandboxProvider.__init__():                                    │
+│   → self.runtime_class = <span class="str">"kata-qemu"</span>                           │
+└───────────────────────────────────────────────────────────────────┘
+
+┌─ <b>请求阶段</b> ──────────────────────────────────────────────────────┐
+│ POST /v1/sandboxes { image:<span class="str">"python:3.11"</span>, ... }              │
+│   → sandbox_service.create_sandbox()                              │
+│   → ensure_egress_runtime_compatible()                             │
+│       runtime_type=<span class="str">"kata"</span> → 通过 (不在 gVisor 黑名单)        │
+│   → workload_provider.create_workload()                           │
+│       BatchSandboxProvider:                                        │
+│         1. 构建 pod_spec                                           │
+│         2. pod_spec[<span class="str">"runtimeClassName"</span>] = <span class="str">"kata-qemu"</span>          │
+│         3. spec.template.spec = pod_spec                           │
+│         4. k8s_client.create_custom_object(batchsandbox)          │
+└───────────────────────────────────────────────────────────────────┘
+
+┌─ <b>K8s 集群</b> ──────────────────────────────────────────────────────┐
+│ BatchSandbox CR 创建 → Controller reconcile → 创建 Pod            │
+│   Pod.Spec.RuntimeClassName = <span class="str">"kata-qemu"</span>                      │
+│   → kubelet 查找 RuntimeClass <span class="str">"kata-qemu"</span>                       │
+│   → handler: <span class="str">"kata"</span> → containerd 启动 Kata VM                 │
+│   → Pod Running + IP → Server 轮询 → 返回给用户                   │
+└───────────────────────────────────────────────────────────────────┘</div>
+
+<div class="grid-2" style="margin-top:20px;">
+  <div class="card">
+    <div class="card-header"><div class="card-icon blue">📋</div><div><div class="card-title">CRD 存储位置</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Go — batchsandbox_types.go</span>
+        <pre><span class="kw">type</span> BatchSandboxSpec <span class="kw">struct</span> {
+    Template *corev1.PodTemplateSpec  <span class="cmt">// ← runtimeClassName 在此内部</span>
+    <span class="cmt">//                   ↓</span>
+    <span class="cmt">// Template.Spec.RuntimeClassName = "kata-qemu"</span>
+}</pre>
+      </div>
+      <p style="font-size:12px;color:var(--text2);margin-top:8px;">使用标准 <code>PodSpec.RuntimeClassName</code> 字段，非 CRD 自定义字段 — 标准 K8s 语义</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon green">📝</div><div><div class="card-title">CreateSandboxRequest — 无 secure_runtime 字段</div></div></div>
+    <div class="card-body">
+      <div class="code-block">
+        <span class="lang-tag">Python — schema.py</span>
+        <pre><span class="kw">class</span> <span class="cls">CreateSandboxRequest</span>(BaseModel):
+    image: Optional[ImageSpec]
+    entrypoint: Optional[List[str]]
+    platform: Optional[PlatformSpec]  <span class="cmt"># os/arch only</span>
+    <span class="cmt"># 无 secure_runtime! ← 运维级配置，用户不可选</span></pre>
+      </div>
+      <p style="font-size:12px;color:var(--text2);margin-top:8px;">一个 Server 实例绑定一个安全运行时 — 用户无法按沙箱切换</p>
+    </div>
+  </div>
+</div>
+</div></div>
+
+<!-- ═══════ DESIGN ═══════ -->
+<div class="container" id="design">
+<div class="section" style="padding-top:0;">
+<div class="section-label">Design Decisions</div>
+<div class="section-header"><h2>🎯 关键设计决策</h2></div>
+
+<div class="grid-3">
+  <div class="card"><div class="card-header"><div class="card-icon blue">🔒</div><div><div class="card-title">运维配置 · 用户不可选</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">一个 Server = 一个安全运行时 · 用户无法在 API 请求中切换 runc/kata/gVisor · 安全边界由运维定义</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon green">🔀</div><div><div class="card-title">双后端支持 Kata</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">Docker → <code>--runtime kata-runtime</code> · K8s → <code>runtimeClassName: kata-qemu</code> · 同一配置切换</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon orange">🚫</div><div><div class="card-title">Firecracker 仅 K8s</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">config.py 模型级 + AppConfig 级双重拦截 · Docker 环境设 firecracker → ValueError</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon pink">✅</div><div><div class="card-title">Kata 兼容 Egress</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">仅 gVisor 缺 iptables NAT · error 消息推荐 kata 替代 · Kata 完整 VM 支持所有网络操作</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon purple">🗺️</div><div><div class="card-title">默认值可覆盖</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);"><code>type="kata"</code> 默认 <code>kata-qemu</code> · 可指定 <code>kata-vm-isolation</code> (AKS) · 支持任意 RuntimeClass 名</p></div></div>
+  <div class="card"><div class="card-header"><div class="card-icon cyan">⚡</div><div><div class="card-title">Fail-Fast 启动校验</div></div></div><div class="card-body"><p style="font-size:13px;color:var(--text2);">启动时读 RuntimeClass → 404 直接退出 · 而非等到第一个创建请求时才报错 · 配置错误早发现</p></div></div>
+</div>
+</div></div>
+
+<footer class="footer">
+  <p>OpenSandbox — <a href="https://github.com/alibaba/OpenSandbox" target="_blank">github.com/alibaba/OpenSandbox</a></p>
+  <p style="margin-top:8px;">K8s RuntimeClass · Kata Containers · gVisor · Firecracker · 安全容器运行时</p>
+</footer>
+
+</body>
+</html>
