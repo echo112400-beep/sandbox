@@ -668,6 +668,68 @@ class TestKubernetesSandboxServiceCreate:
         k8s_service.workload_provider.create_workload.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_create_sandbox_pool_mode_missing_pool_fails_fast(
+        self, k8s_service
+    ):
+        """Pool mode validates poolRef before creating the BatchSandbox."""
+        from opensandbox_server.api.schema import CreateSandboxRequest
+
+        pool_request = CreateSandboxRequest(
+            extensions={"poolRef": "does-not-exist-pool"},
+        )
+        k8s_service.k8s_client.get_custom_object.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await k8s_service.create_sandbox(pool_request)
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == {
+            "code": SandboxErrorCodes.K8S_POOL_NOT_FOUND,
+            "message": "Pool 'does-not-exist-pool' not found.",
+        }
+        k8s_service.k8s_client.get_custom_object.assert_called_once_with(
+            group="sandbox.opensandbox.io",
+            version="v1alpha1",
+            namespace=k8s_service.namespace,
+            plural="pools",
+            name="does-not-exist-pool",
+        )
+        k8s_service.workload_provider.create_workload.assert_not_called()
+        k8s_service.workload_provider.delete_workload.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_sandbox_pool_mode_auto_assign_skips_pool_lookup(
+        self, k8s_service, mock_workload
+    ):
+        """Pool auto-assignment uses '*' and must be handled by the controller."""
+        from opensandbox_server.api.schema import CreateSandboxRequest
+
+        pool_request = CreateSandboxRequest(
+            extensions={"poolRef": "*"},
+        )
+
+        k8s_service.workload_provider.create_workload.return_value = {
+            "name": "test-sandbox-pool-auto",
+            "uid": "pool-auto-123",
+        }
+        k8s_service.workload_provider.get_workload.return_value = mock_workload
+        k8s_service.workload_provider.get_status.return_value = {
+            "state": "Running",
+            "reason": "",
+            "message": "Pod is running",
+            "last_transition_at": datetime.now(timezone.utc),
+        }
+        k8s_service.workload_provider.get_endpoint_info.return_value = "10.244.0.5:8080"
+        k8s_service.workload_provider.get_expiration.return_value = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        response = await k8s_service.create_sandbox(pool_request)
+
+        assert response.id is not None
+        k8s_service.k8s_client.get_custom_object.assert_not_called()
+        k8s_service.workload_provider.create_workload.assert_called_once()
+        assert k8s_service.workload_provider.create_workload.call_args.kwargs["extensions"] == {"poolRef": "*"}
+
+    @pytest.mark.asyncio
     async def test_create_sandbox_pool_mode_skips_image_and_entrypoint_validation(
         self, k8s_service, mock_workload
     ):
